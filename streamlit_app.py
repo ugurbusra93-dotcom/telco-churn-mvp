@@ -312,24 +312,37 @@ with tab_alerts:
                     with st.spinner("SMS oluşturuluyor..."):
                         try:
                             client = anthropic.Anthropic(api_key=api_key)
-                            prompt = f"""Bir telekom sirketi icin musteriye SMS ile gonderilecek kisa,
-sicak ve ikna edici bir mesaj yaz. Kurallar:
-- Turkce yaz, gunluk konusma dilinde ama saygili
-- En fazla 2-3 cumle, SMS formatinda (160 karakteri gecmesin ideal olarak)
-- Musterinin adini kullanma, "Degerli musterimiz" gibi bir hitapla basla
-- Asagidaki bilgilere gore mesaji kisisellestir:
+                            prompt = f"""Sen bir telekom sirketinde deneyimli bir pazarlama metin yazarisin.
+Asagidaki musteri bilgisine gore, churn (musteri kaybi) riskini azaltmayi
+hedefleyen, SMS ile gonderilecek TEK bir mesaj yaz.
 
-Musteri segmenti: {cust['ChurnReasonSegment']}
-Onerilen kampanya: {cust['RecommendedCampaign']}
-Musteri {cust['tenure']} aydir bizimle, aylik {cust['MonthlyCharges']:.0f} TL odiyor.
-Sozlesme tipi: {cust['Contract']}
+Musteri verisi:
+- Segment: {cust['ChurnReasonSegment']}
+- Onerilen kampanya: {cust['RecommendedCampaign']}
+- Musterilik suresi: {cust['tenure']} ay
+- Aylik odeme: {cust['MonthlyCharges']:.0f} TL
+- Sozlesme tipi: {cust['Contract']}
 
-Sadece SMS metnini yaz, baska aciklama ekleme."""
+Kurallar (kesinlikle uy):
+1. SADECE nihai, temiz SMS metnini yaz. Ilk taslak, aciklama, alternatif,
+   dipnot, yildizli not (*), kendi kendini duzeltme YOK. Tek seferde dogru
+   ve son halini yaz.
+2. Turkce, sicak ama profesyonel bir ton kullan; abartili unlemlerden kacin.
+3. En fazla 2 cumle, toplamda 160 karakteri gecme.
+4. "Degerli musterimiz" ile basla, musteri adini kullanma.
+5. Musterilik suresini dogru say: {cust['tenure']} ay (yil degil, ay olarak
+   ifade et eger 12'den kucukse; 12 veya uzeriyse yil olarak da belirtebilirsin
+   ama sayiyi yanlis hesaplama).
+6. Kampanyayi somut ve net anlat, genel gecer laf kalabaligi yapma.
+7. Bir eylem cagrisi (CTA) ile bitir: "Hemen aktif edin", "Detaylar icin
+   tikla" gibi kisa bir kapanis.
+
+Cikti SADECE SMS metni olsun, baska hicbir sey yazma."""
                             response = client.messages.create(
-                                model="claude-sonnet-5", max_tokens=500,
+                                model="claude-sonnet-5", max_tokens=300,
                                 messages=[{"role": "user", "content": prompt}],
                             )
-                            sms_text = "".join(b.text for b in response.content if b.type == "text")
+                            sms_text = "".join(b.text for b in response.content if b.type == "text").strip()
                             st.session_state["generated_sms"][cust["customerID"]] = sms_text
                         except Exception as e:
                             st.error(f"SMS oluşturulurken hata oluştu: {e}")
@@ -402,21 +415,3 @@ with tab_roi:
         revenue_saved = expected_retained * avg_clv
         total_cost = n_targeted * campaign_cost
         net_roi = revenue_saved - total_cost
-        roi_multiplier = (revenue_saved / total_cost) if total_cost > 0 else 0
-        m1, m2, m3 = st.columns(3)
-        m1.metric("Hedeflenen Müşteri", f"{n_targeted:,}")
-        m2.metric("Beklenen Kurtarılan Müşteri", f"{expected_retained:,.0f}")
-        m3.metric("Ortalama CLV", f"${avg_clv:,.0f}")
-        m4, m5, m6 = st.columns(3)
-        m4.metric("Toplam Kampanya Maliyeti", f"${total_cost:,.0f}")
-        m5.metric("Kurtarılan Gelir", f"${revenue_saved:,.0f}")
-        m6.metric("Net ROI", f"${net_roi:,.0f}", delta=f"{roi_multiplier:.1f}x" if total_cost > 0 else None)
-        if total_cost > 0:
-            if net_roi > 0:
-                st.success(f"Bu senaryoda kampanya kârlı: her 1$ maliyete karşılık ~{roi_multiplier:.1f}$ gelir kurtarılıyor.")
-            else:
-                st.warning("Bu senaryoda kampanya maliyeti, kurtarılan gelirden fazla.")
-    st.caption(
-        "* Bu simülasyon varsayımsal maliyet ve dönüşüm oranlarına dayanır. Gerçek kampanya "
-        "sonuçları geldiğinde bu değerler güncellenmeli."
-    )
