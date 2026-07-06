@@ -334,8 +334,11 @@ Kurallar (kesinlikle uy):
    ifade et eger 12'den kucukse; 12 veya uzeriyse yil olarak da belirtebilirsin
    ama sayiyi yanlis hesaplama).
 6. Kampanyayi somut ve net anlat, genel gecer laf kalabaligi yapma.
-7. Bir eylem cagrisi (CTA) ile bitir: "Hemen aktif edin", "Detaylar icin
-   tikla" gibi kisa bir kapanis.
+7. Bir eylem cagrisi (CTA) ile bitir, ama KESINLIKLE soru cumlesi kurma
+   (soru isareti "?" kullanma). Emir kipiyle, net bir yonlendirme yap:
+   "Hemen aktif edin.", "Detaylar icin 444'u arayin.", "Kampanyadan
+   yararlanmak icin uygulamayi acin." gibi. Gercek bir telekom firmasinin
+   musteriye soru sorarak degil, yonlendirerek konustugunu unutma.
 
 Cikti SADECE SMS metni olsun, baska hicbir sey yazma."""
                             response = client.messages.create(
@@ -415,3 +418,21 @@ with tab_roi:
         revenue_saved = expected_retained * avg_clv
         total_cost = n_targeted * campaign_cost
         net_roi = revenue_saved - total_cost
+        roi_multiplier = (revenue_saved / total_cost) if total_cost > 0 else 0
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Hedeflenen Müşteri", f"{n_targeted:,}")
+        m2.metric("Beklenen Kurtarılan Müşteri", f"{expected_retained:,.0f}")
+        m3.metric("Ortalama CLV", f"${avg_clv:,.0f}")
+        m4, m5, m6 = st.columns(3)
+        m4.metric("Toplam Kampanya Maliyeti", f"${total_cost:,.0f}")
+        m5.metric("Kurtarılan Gelir", f"${revenue_saved:,.0f}")
+        m6.metric("Net ROI", f"${net_roi:,.0f}", delta=f"{roi_multiplier:.1f}x" if total_cost > 0 else None)
+        if total_cost > 0:
+            if net_roi > 0:
+                st.success(f"Bu senaryoda kampanya kârlı: her 1$ maliyete karşılık ~{roi_multiplier:.1f}$ gelir kurtarılıyor.")
+            else:
+                st.warning("Bu senaryoda kampanya maliyeti, kurtarılan gelirden fazla.")
+    st.caption(
+        "* Bu simülasyon varsayımsal maliyet ve dönüşüm oranlarına dayanır. Gerçek kampanya "
+        "sonuçları geldiğinde bu değerler güncellenmeli."
+    )
