@@ -79,13 +79,26 @@ st.markdown(
     .crd-kpi.warn .crd-kpi-value { color:#F492A8; }
     .crd-kpi.accent .crd-kpi-value { color:#C4B5FD; }
 
-    button[data-baseweb="tab"] { font-family:'Inter', sans-serif; font-weight:600; font-size:14px; color:#3A3F6B; }
-    div[data-baseweb="tab-list"] { gap: 4px; border-bottom: 2px solid #E2E4F0; }
-    button[aria-selected="true"] {
-        background: linear-gradient(90deg, #7B5CF5, #17B8A0);
-        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-        border-bottom-color:#7B5CF5 !important;
+    /* Sekme grubu - segmented control gorunumu */
+    div[data-baseweb="tab-list"] {
+        display:flex; justify-content:center; gap:8px; border-bottom:none;
+        background:#EDEEF6; padding:6px; border-radius:12px; margin:0 auto 24px auto;
+        max-width:640px;
     }
+    button[data-baseweb="tab"] {
+        font-family:'Inter', sans-serif; font-weight:600; font-size:14.5px; color:#5A5F8C;
+        border-radius:8px; padding:10px 18px !important; border:none !important;
+        transition: all .15s ease;
+    }
+    button[data-baseweb="tab"]:hover { background: rgba(123,92,245,.08); }
+    button[aria-selected="true"] {
+        background: white !important;
+        box-shadow: 0 1px 4px rgba(23,20,80,.12);
+        background: linear-gradient(90deg, #7B5CF5, #17B8A0) !important;
+        -webkit-background-clip: text !important; -webkit-text-fill-color: transparent !important;
+    }
+    div[data-baseweb="tab-highlight"] { display:none; }
+    div[data-baseweb="tab-border"] { display:none; }
 
     .risk-badge {
         display:inline-block; padding:3px 10px; border-radius:20px;
@@ -186,12 +199,27 @@ if not ANTHROPIC_AVAILABLE:
 
 st.sidebar.markdown("---")
 st.sidebar.header("Filtreler")
+st.sidebar.caption("Bu filtreler sadece 📋 Müşteri Listesi sekmesindeki tabloyu etkiler.")
 
 segments = ["Tümü"] + sorted(df["ChurnReasonSegment"].unique().tolist())
-selected_segment = st.sidebar.selectbox("Segment", segments)
-min_risk = st.sidebar.slider("Minimum Churn Riski", 0.0, 1.0, 0.0, 0.05)
+selected_segment = st.sidebar.selectbox(
+    "Segment",
+    segments,
+    help="Sadece belirli bir churn nedenine sahip müşterileri göster. "
+         "Örn. 'Fiyat Duyarlı' seçersen sadece o gruptaki müşteriler listelenir.",
+)
+min_risk = st.sidebar.slider(
+    "Minimum Churn Riski",
+    0.0, 1.0, 0.0, 0.05,
+    help="Sadece bu değerin ÜZERİNDE risk skoruna sahip müşterileri göster. "
+         "0.50 = müşterinin %50+ ihtimalle ayrılacağı tahmin ediliyor demek. "
+         "Değeri yükselttikçe liste daralır, sadece en riskli müşteriler kalır.",
+)
 sort_option = st.sidebar.selectbox(
-    "Sırala", ["Risk (yüksekten düşüğe)", "Tahmini CLV (yüksekten düşüğe)", "Tenure (düşükten yükseğe)"]
+    "Sırala",
+    ["Risk (yüksekten düşüğe)", "Tahmini CLV (yüksekten düşüğe)", "Tenure (düşükten yükseğe)"],
+    help="Tablodaki müşterilerin hangi sıraya göre listeleneceğini belirler. "
+         "Örn. 'Tahmini CLV' seçersen en değerli müşteriler en üstte çıkar.",
 )
 
 filtered = df.copy()
@@ -251,16 +279,25 @@ with tab_alerts:
     c1, c2 = st.columns([1, 3])
     with c1:
         if st.button("🆕 Yeni Uyarı Simüle Et", use_container_width=True):
-            if st.session_state["alert_pool"]:
-                new_id = st.session_state["alert_pool"].pop(0)
+            already_alerted = {a["customerID"] for a in st.session_state["alert_feed"]}
+            candidates = df[df["ChurnRiskScore"] > 0.5]
+            if selected_segment != "Tümü":
+                candidates = candidates[candidates["ChurnReasonSegment"] == selected_segment]
+            candidates = candidates[~candidates["customerID"].isin(already_alerted)]
+
+            if len(candidates) > 0:
+                new_id = candidates.sample(1)["customerID"].iloc[0]
                 st.session_state["alert_feed"].insert(
                     0, {"customerID": new_id, "time": datetime.datetime.now().strftime("%H:%M:%S")}
                 )
                 st.session_state["selected_customer"] = new_id
             else:
-                st.info("Havuzdaki tüm yüksek riskli müşteriler zaten akışa düştü.")
+                st.info(
+                    f"'{selected_segment}' segmentinde daha önce gösterilmemiş yüksek riskli "
+                    "müşteri kalmadı. Sol panelden segmenti değiştirebilirsin."
+                )
     with c2:
-        st.caption(f"Havuzda bekleyen: {len(st.session_state['alert_pool'])} müşteri")
+        st.caption(f"Şu an seçili segment: **{selected_segment}** (sol panelden değiştirebilirsin)")
 
     if not st.session_state["alert_feed"]:
         st.info("Henüz uyarı yok. 'Yeni Uyarı Simüle Et' butonuna tıkla.")
