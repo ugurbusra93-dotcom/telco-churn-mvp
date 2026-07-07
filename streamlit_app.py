@@ -243,6 +243,15 @@ st.markdown(
 )
 
 
+def render_html(html_str):
+    """Coklu satirli HTML string'i tek satira sikistirir ve render eder.
+    Streamlit/Markdown, 4+ bosluk girintili satirlari 'kod bloku' sanip
+    duz metin olarak gosterebiliyor - bunu onlemek icin tum satirlari
+    birlestirip girintiyi kaldiriyoruz."""
+    single_line = " ".join(line.strip() for line in html_str.strip().splitlines())
+    st.markdown(single_line, unsafe_allow_html=True)
+
+
 def make_sparkline_svg(values, color="#7C5CFF", width=140, height=36):
     """Gercek veriden turetilmis kucuk bir SVG sparkline uretir (KPI karti icine gomulur)."""
     values = list(values)
@@ -278,7 +287,7 @@ def load_data():
 
 df = load_data()
 
-st.markdown(
+render_html(
     """
     <div class="crd-header">
         <div class="crd-brand-row">
@@ -291,8 +300,7 @@ st.markdown(
         <div class="crd-tagline">Predict. Personalize. Retain.</div>
         <div class="crd-sub">Telco Churn Dataset · 7.043 müşteri · Model AUC 0.84</div>
     </div>
-    """,
-    unsafe_allow_html=True,
+    """
 )
 
 # ---------- Rol secici ----------
@@ -301,7 +309,6 @@ ROLES = {
     "📣 Pazarlama Ekibi": "marketing",
     "🎯 Retention Manager": "retention",
 }
-st.markdown('<div style="max-width:640px; margin:0 auto 24px auto;">', unsafe_allow_html=True)
 selected_role_label = st.radio(
     "Rolünü seç",
     list(ROLES.keys()),
@@ -309,7 +316,6 @@ selected_role_label = st.radio(
     label_visibility="collapsed",
     key="role_selector",
 )
-st.markdown('</div>', unsafe_allow_html=True)
 user_role = ROLES[selected_role_label]
 
 _env_api_key = os.environ.get("ANTHROPIC_API_KEY", "")
@@ -374,7 +380,7 @@ risk_hist, _ = np.histogram(df["ChurnRiskScore"], bins=16)
 atrisk_clv_hist, _ = np.histogram(df[df['ChurnRiskScore'] > 0.5]['EstimatedCLV'], bins=16)
 filtered_risk_hist, _ = np.histogram(filtered["ChurnRiskScore"], bins=16) if len(filtered) > 1 else (np.array([0, 0]), None)
 
-st.markdown(
+render_html(
     f"""
     <div class="crd-kpi-row">
         <div class="crd-kpi">
@@ -414,8 +420,7 @@ st.markdown(
             {make_sparkline_svg(filtered_risk_hist, "#7C5CFF") if len(filtered) > 1 else ''}
         </div>
     </div>
-    """,
-    unsafe_allow_html=True,
+    """
 )
 
 if "alert_pool" not in st.session_state:
@@ -540,35 +545,21 @@ Kurallar:
     if "exec_summary_html" not in st.session_state:
         st.session_state["exec_summary_html"] = fallback_summary
 
-    st.markdown(
-        f"""
-        <div class="crd-ai-card">
-            <div class="crd-ai-eyebrow">🤖 AI Executive Summary</div>
-            <div style="font-size:19px; line-height:1.7; color:#F5F6FD; font-weight:500; margin-bottom:20px;">
-                {st.session_state['exec_summary_html']}
-            </div>
-            <div class="crd-ai-metrics">
-                <div>
-                    <div class="crd-ai-metric-label">Hedef Müşteri</div>
-                    <div class="crd-ai-metric-value">{rec_n}</div>
-                </div>
-                <div>
-                    <div class="crd-ai-metric-label">Beklenen Kurtarılan</div>
-                    <div class="crd-ai-metric-value pos">{rec_retained:,.0f}</div>
-                </div>
-                <div>
-                    <div class="crd-ai-metric-label">Beklenen Gelir</div>
-                    <div class="crd-ai-metric-value pos">${rec_revenue:,.0f}</div>
-                </div>
-                <div>
-                    <div class="crd-ai-metric-label">Kampanya Maliyeti</div>
-                    <div class="crd-ai-metric-value">${rec_total_cost:,.0f}</div>
-                </div>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    _exec_html = (
+        '<div class="crd-ai-card">'
+        '<div class="crd-ai-eyebrow">🤖 AI Executive Summary</div>'
+        '<div style="font-size:19px; line-height:1.7; color:#F5F6FD; font-weight:500; margin-bottom:20px; white-space:pre-wrap;">'
+        + st.session_state['exec_summary_html'] +
+        '</div>'
+        '<div class="crd-ai-metrics">'
+        f'<div><div class="crd-ai-metric-label">Hedef Müşteri</div><div class="crd-ai-metric-value">{rec_n}</div></div>'
+        f'<div><div class="crd-ai-metric-label">Beklenen Kurtarılan</div><div class="crd-ai-metric-value pos">{rec_retained:,.0f}</div></div>'
+        f'<div><div class="crd-ai-metric-label">Beklenen Gelir</div><div class="crd-ai-metric-value pos">${rec_revenue:,.0f}</div></div>'
+        f'<div><div class="crd-ai-metric-label">Kampanya Maliyeti</div><div class="crd-ai-metric-value">${rec_total_cost:,.0f}</div></div>'
+        '</div>'
+        '</div>'
     )
+    st.markdown(_exec_html, unsafe_allow_html=True)
 
     st.markdown("##### Segmentlere Göre Riskteki Gelir")
     seg_chart_df = seg_summary_exec.reset_index().sort_values("clv_at_risk", ascending=True)
@@ -695,13 +686,8 @@ if tab_copilot:
                         st.error(f"Cevap üretilirken hata oluştu: {e}")
 
         if st.session_state.get("copilot_answer"):
-            st.markdown(
-                f"""<div class="crd-ai-card">
-                <div class="crd-ai-eyebrow">🤖 AI Copilot Yanıtı</div>
-                <div style="color:#E4E7F5; font-size:15px; line-height:1.7; white-space:pre-wrap;">{st.session_state['copilot_answer']}</div>
-                </div>""",
-                unsafe_allow_html=True,
-            )
+            _copilot_html = '<div class="crd-ai-card"><div class="crd-ai-eyebrow">🤖 AI Copilot Yanıtı</div><div style="color:#E4E7F5; font-size:15px; line-height:1.7; white-space:pre-wrap;">' + st.session_state['copilot_answer'] + '</div></div>'
+            st.markdown(_copilot_html, unsafe_allow_html=True)
 
 if tab_alerts:
     with tab_alerts:
@@ -749,7 +735,7 @@ if tab_alerts:
             st.markdown("<br>", unsafe_allow_html=True)
             card_col1, card_col2 = st.columns([1, 1])
             with card_col1:
-                st.markdown(
+                render_html(
                     f"""<div class="crd-card"><h4>👤 Müşteri Profili</h4>
                     <div class="crd-field"><b>ID:</b> {cust['customerID']}</div>
                     <div class="crd-field"><b>Risk:</b> {risk_badge_html(cust['ChurnRiskScore'])}</div>
@@ -759,17 +745,15 @@ if tab_alerts:
                     <div class="crd-field"><b>Sözleşme:</b> {cust['Contract']}</div>
                     <div class="crd-field"><b>İnternet:</b> {cust['InternetService']}</div>
                     <div class="crd-field"><b>Tahmini CLV:</b> ${cust['EstimatedCLV']:,.0f}</div>
-                    </div>""",
-                    unsafe_allow_html=True,
+                    </div>"""
                 )
             with card_col2:
-                st.markdown(
+                render_html(
                     f"""<div class="crd-card"><h4>🎯 Önerilen Aksiyon</h4>
                     <div class="crd-field"><b>Kampanya:</b> {cust['RecommendedCampaign']}</div>
                     <div class="crd-field"><b>Varsayılan Dönüşüm:</b> ~%{cust['SimulatedConversionRate']*100:.0f}</div>
                     <div class="crd-field"><b>Maliyet:</b> ${cust['CampaignCostPerCustomer']:.0f}/müşteri</div>
-                    </div>""",
-                    unsafe_allow_html=True,
+                    </div>"""
                 )
                 st.markdown("<br>", unsafe_allow_html=True)
                 if st.button("✉️ Kişiselleştirilmiş SMS Oluştur", key=f"sms_btn_{cust['customerID']}"):
