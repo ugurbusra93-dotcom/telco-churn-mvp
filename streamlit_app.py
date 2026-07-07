@@ -184,7 +184,6 @@ st.markdown(
 _env_api_key = os.environ.get("ANTHROPIC_API_KEY", "")
 if _env_api_key:
     st.session_state["api_key"] = _env_api_key
-    st.sidebar.success("✅ API key .env dosyasından yüklendi.")
 else:
     st.sidebar.header("⚙️ Claude API Ayarı")
     api_key_input = st.sidebar.text_input(
