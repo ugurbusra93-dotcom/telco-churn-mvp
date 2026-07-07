@@ -456,6 +456,144 @@ visible_tab_labels = ROLE_TAB_MAP[user_role]
 role_names = {"executive": "Yönetici", "marketing": "Pazarlama Ekibi", "retention": "Retention Manager"}
 st.caption(f"📍 Şu an **{role_names[user_role]}** görünümündesin — bu role özel {len(visible_tab_labels)} ekran gösteriliyor.")
 
+# ---------- AI Executive Briefing (sadece Yonetici rolunde) ----------
+if user_role == "executive":
+    seg_summary_exec = (
+        df.groupby("ChurnReasonSegment")
+        .agg(
+            n=("customerID", "count"),
+            avg_risk=("ChurnRiskScore", "mean"),
+            clv_at_risk=("EstimatedCLV", "sum"),
+            conv=("SimulatedConversionRate", "mean"),
+            cost=("CampaignCostPerCustomer", "mean"),
+        )
+        .sort_values("clv_at_risk", ascending=False)
+    )
+    top_segment_clv = seg_summary_exec.index[0]
+    top_segment_risk = seg_summary_exec.sort_values("avg_risk", ascending=False).index[0]
+
+    # AI onerisi: en yuksek ortalama riske sahip segmentteki riskli musteriler icin ROI
+    rec_pool = df[(df["ChurnReasonSegment"] == top_segment_risk) & (df["ChurnRiskScore"] > 0.5)]
+    rec_n = len(rec_pool)
+    rec_conv = rec_pool["SimulatedConversionRate"].mean() if rec_n > 0 else 0
+    rec_cost = rec_pool["CampaignCostPerCustomer"].mean() if rec_n > 0 else 0
+    rec_clv = rec_pool["EstimatedCLV"].mean() if rec_n > 0 else 0
+    rec_retained = rec_n * rec_conv
+    rec_revenue = rec_retained * rec_clv
+    rec_total_cost = rec_n * rec_cost
+    rec_roi_mult = (rec_revenue / rec_total_cost) if rec_total_cost > 0 else 0
+
+    fallback_summary = (
+        f"<span style='color:#FF93AF; font-weight:700;'>%{at_risk_pct:.1f}</span> müşteri tabanı "
+        f"(<span style='font-family:\"IBM Plex Mono\",monospace;'>{at_risk_count:,}</span> müşteri) "
+        f"şu an yüksek risk taşıyor, toplam "
+        f"<span style='color:#5EEAD4; font-weight:700;'>${at_risk_clv:,.0f}</span> tahmini gelir riskte. "
+        f"En yoğun segment <b>{top_segment_clv}</b>. Önerimiz <b>{top_segment_risk}</b> "
+        f"segmentine kampanya başlatmak — beklenen "
+        f"<span style='color:#4ADE80; font-weight:700;'>{rec_roi_mult:.1f}x</span> getiri."
+    )
+
+    ai_col1, ai_col2 = st.columns([5, 1])
+    with ai_col2:
+        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+        refresh_clicked = st.button("🔄 AI Özeti Üret", key="refresh_exec_summary", use_container_width=True)
+
+    if refresh_clicked:
+        api_key = st.session_state.get("api_key", "")
+        if not api_key or not ANTHROPIC_AVAILABLE:
+            st.session_state["exec_summary_html"] = fallback_summary
+            if not api_key:
+                ai_col1.warning("API key girilmedi, şablon özet gösteriliyor. Sol panelden key gir.")
+        else:
+            with st.spinner("AI özet oluşturuyor..."):
+                try:
+                    client = anthropic.Anthropic(api_key=api_key)
+                    prompt = f"""Sen bir telekom sirketinde CEO/CMO'ya sunum yapan bir veri analistisin.
+Asagidaki GERCEK verilere dayanarak, yoneticiye 2-3 cumlelik kisa bir Turkce ozet yaz.
+
+Toplam musteri: {len(df):,}
+Yuksek riskli musteri (>%50): {at_risk_count:,} (%{at_risk_pct:.1f})
+Riskteki toplam tahmini CLV: ${at_risk_clv:,.0f}
+En yuksek CLV riski tasiyan segment: {top_segment_clv}
+En yuksek ortalama riske sahip segment: {top_segment_risk}
+Onerilen kampanya hedef kitlesi: {rec_n} musteri
+Beklenen kurtarilan musteri: {rec_retained:.0f}
+Beklenen gelir: ${rec_revenue:,.0f}
+Kampanya maliyeti: ${rec_total_cost:,.0f}
+ROI carpani: {rec_roi_mult:.1f}x
+
+Kurallar:
+- SADECE yukaridaki sayilari kullan, uydurma sayi ekleme.
+- Yonetici diline uygun, kisa, net, aksiyon odakli yaz.
+- 2-3 cumle, HTML/markdown formatlamasi kullanma, duz metin yaz.
+- "Onerimiz" gibi bir ifadeyle kampanya onerisini vurgula."""
+                    response = client.messages.create(
+                        model="claude-sonnet-5", max_tokens=300,
+                        messages=[{"role": "user", "content": prompt}],
+                    )
+                    ai_text = "".join(b.text for b in response.content if b.type == "text").strip()
+                    st.session_state["exec_summary_html"] = ai_text
+                except Exception as e:
+                    st.session_state["exec_summary_html"] = fallback_summary
+                    ai_col1.error(f"AI özet üretilemedi, şablon gösteriliyor: {e}")
+
+    if "exec_summary_html" not in st.session_state:
+        st.session_state["exec_summary_html"] = fallback_summary
+
+    st.markdown(
+        f"""
+        <div class="crd-ai-card">
+            <div class="crd-ai-eyebrow">🤖 AI Executive Summary</div>
+            <div style="font-size:19px; line-height:1.7; color:#F5F6FD; font-weight:500; margin-bottom:20px;">
+                {st.session_state['exec_summary_html']}
+            </div>
+            <div class="crd-ai-metrics">
+                <div>
+                    <div class="crd-ai-metric-label">Hedef Müşteri</div>
+                    <div class="crd-ai-metric-value">{rec_n}</div>
+                </div>
+                <div>
+                    <div class="crd-ai-metric-label">Beklenen Kurtarılan</div>
+                    <div class="crd-ai-metric-value pos">{rec_retained:,.0f}</div>
+                </div>
+                <div>
+                    <div class="crd-ai-metric-label">Beklenen Gelir</div>
+                    <div class="crd-ai-metric-value pos">${rec_revenue:,.0f}</div>
+                </div>
+                <div>
+                    <div class="crd-ai-metric-label">Kampanya Maliyeti</div>
+                    <div class="crd-ai-metric-value">${rec_total_cost:,.0f}</div>
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("##### Segmentlere Göre Riskteki Gelir")
+    seg_chart_df = seg_summary_exec.reset_index().sort_values("clv_at_risk", ascending=True)
+    fig = go.Figure(go.Bar(
+        x=seg_chart_df["clv_at_risk"], y=seg_chart_df["ChurnReasonSegment"],
+        orientation="h",
+        marker=dict(color=["#7C5CFF", "#22D3EE", "#4ADE80", "#FF5D8F", "#F59E0B", "#6B7299"][:len(seg_chart_df)]),
+        text=[f"${v:,.0f}" for v in seg_chart_df["clv_at_risk"]],
+        textposition="outside",
+        textfont=dict(color="#A8AEC7", size=11),
+    ))
+    fig.update_layout(
+        margin=dict(l=0, r=60, t=10, b=10), height=260,
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        xaxis=dict(visible=False),
+        yaxis=dict(tickfont=dict(color="#A8AEC7", size=12)),
+        showlegend=False,
+    )
+    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+    st.caption(
+        "* Bu özet gerçek segment/risk verilerinden hesaplanmıştır (zaman serisi değildir, "
+        "statik anlık görüntüdür). Kampanya maliyeti/dönüşüm oranları varsayımsaldır."
+    )
+    st.markdown("---")
+
 created_tabs = st.tabs(visible_tab_labels)
 tab_map = dict(zip(visible_tab_labels, created_tabs))
 
