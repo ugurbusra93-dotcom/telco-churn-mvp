@@ -225,6 +225,18 @@ st.markdown(
         background: rgba(17,24,45,.7) !important; border:1px solid rgba(255,255,255,.08) !important;
         border-radius:14px !important;
     }
+
+    /* Rol secici - segmented control gorunumu */
+    div[role="radiogroup"] {
+        display:flex; justify-content:center; gap:6px;
+        background: rgba(17,24,45,.7); padding:6px; border-radius:14px;
+        border:1px solid rgba(255,255,255,.06); backdrop-filter: blur(12px);
+    }
+    div[role="radiogroup"] label {
+        border-radius:10px; padding:8px 18px; transition: all .15s ease; cursor:pointer;
+    }
+    div[role="radiogroup"] label:hover { background: rgba(124,92,255,.1); }
+    div[role="radiogroup"] label div:first-child { display:none; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -282,6 +294,23 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
+# ---------- Rol secici ----------
+ROLES = {
+    "👔 Yönetici": "executive",
+    "📣 Pazarlama Ekibi": "marketing",
+    "🎯 Retention Manager": "retention",
+}
+st.markdown('<div style="max-width:640px; margin:0 auto 24px auto;">', unsafe_allow_html=True)
+selected_role_label = st.radio(
+    "Rolünü seç",
+    list(ROLES.keys()),
+    horizontal=True,
+    label_visibility="collapsed",
+    key="role_selector",
+)
+st.markdown('</div>', unsafe_allow_html=True)
+user_role = ROLES[selected_role_label]
 
 _env_api_key = os.environ.get("ANTHROPIC_API_KEY", "")
 if _env_api_key:
@@ -410,207 +439,334 @@ def risk_badge_html(x):
     return f'<span class="risk-badge risk-low">🟢 {x*100:.0f}%</span>'
 
 
-tab_alerts, tab_list, tab_roi = st.tabs(["🔔 Canlı Uyarılar", "📋 Müşteri Listesi", "💰 ROI Simülasyonu"])
+ALL_TABS = {
+    "🤖 AI Copilot": "copilot",
+    "🔔 Canlı Uyarılar": "alerts",
+    "📋 Müşteri Listesi": "list",
+    "💰 ROI Simülasyonu": "roi",
+}
 
-with tab_alerts:
-    st.caption(
-        "Gerçek zamanlı bir CRM entegrasyonunda bu akış otomatik dolar. MVP'de yeni "
-        "uyarıyı simüle etmek için butona tıkla."
-    )
-    c1, c2 = st.columns([1, 3])
-    with c1:
-        if st.button("🆕 Yeni Uyarı Simüle Et", use_container_width=True):
-            already_alerted = {a["customerID"] for a in st.session_state["alert_feed"]}
-            candidates = df[df["ChurnRiskScore"] > 0.5]
-            if selected_segment != "Tümü":
-                candidates = candidates[candidates["ChurnReasonSegment"] == selected_segment]
-            candidates = candidates[~candidates["customerID"].isin(already_alerted)]
+ROLE_TAB_MAP = {
+    "executive": ["🤖 AI Copilot", "💰 ROI Simülasyonu"],
+    "marketing": ["📋 Müşteri Listesi", "💰 ROI Simülasyonu", "🤖 AI Copilot"],
+    "retention": ["🔔 Canlı Uyarılar", "🤖 AI Copilot"],
+}
 
-            if len(candidates) > 0:
-                new_id = candidates.sample(1)["customerID"].iloc[0]
-                st.session_state["alert_feed"].insert(
-                    0, {"customerID": new_id, "time": datetime.datetime.now().strftime("%H:%M:%S")}
-                )
-                st.session_state["selected_customer"] = new_id  # yeni uyarı otomatik acilsin
-            else:
-                st.info(
-                    f"'{selected_segment}' segmentinde daha önce gösterilmemiş yüksek riskli "
-                    "müşteri kalmadı. Sol panelden segmenti değiştirebilirsin."
-                )
-    with c2:
-        st.caption(f"Şu an seçili segment: **{selected_segment}** (sol panelden değiştirebilirsin)")
+visible_tab_labels = ROLE_TAB_MAP[user_role]
+role_names = {"executive": "Yönetici", "marketing": "Pazarlama Ekibi", "retention": "Retention Manager"}
+st.caption(f"📍 Şu an **{role_names[user_role]}** görünümündesin — bu role özel {len(visible_tab_labels)} ekran gösteriliyor.")
 
-    if not st.session_state["alert_feed"]:
-        st.info("Henüz uyarı yok. 'Yeni Uyarı Simüle Et' butonuna tıkla.")
-    elif len(st.session_state["alert_feed"]) > 1:
-        with st.expander(f"📜 Geçmiş uyarılar ({len(st.session_state['alert_feed']) - 1})"):
-            for alert in st.session_state["alert_feed"][1:8]:
-                cust = df[df["customerID"] == alert["customerID"]].iloc[0]
-                risk_pct = cust["ChurnRiskScore"] * 100
-                icon = "🔴" if risk_pct > 60 else "🟡"
-                label = f"{icon} [{alert['time']}] {cust['customerID']} — {cust['ChurnReasonSegment']} — Risk %{risk_pct:.0f}"
-                if st.button(label, key=f"alert_{alert['customerID']}_{alert['time']}"):
-                    st.session_state["selected_customer"] = cust["customerID"]
+created_tabs = st.tabs(visible_tab_labels)
+tab_map = dict(zip(visible_tab_labels, created_tabs))
 
-    if st.session_state["selected_customer"]:
-        cust = df[df["customerID"] == st.session_state["selected_customer"]].iloc[0]
-        st.markdown("<br>", unsafe_allow_html=True)
-        card_col1, card_col2 = st.columns([1, 1])
-        with card_col1:
-            st.markdown(
-                f"""<div class="crd-card"><h4>👤 Müşteri Profili</h4>
-                <div class="crd-field"><b>ID:</b> {cust['customerID']}</div>
-                <div class="crd-field"><b>Risk:</b> {risk_badge_html(cust['ChurnRiskScore'])}</div>
-                <div class="crd-field"><b>Segment:</b> {cust['ChurnReasonSegment']}</div>
-                <div class="crd-field"><b>Tenure:</b> {cust['tenure']} ay</div>
-                <div class="crd-field"><b>Aylık Ücret:</b> ${cust['MonthlyCharges']:.2f}</div>
-                <div class="crd-field"><b>Sözleşme:</b> {cust['Contract']}</div>
-                <div class="crd-field"><b>İnternet:</b> {cust['InternetService']}</div>
-                <div class="crd-field"><b>Tahmini CLV:</b> ${cust['EstimatedCLV']:,.0f}</div>
-                </div>""",
-                unsafe_allow_html=True,
-            )
-        with card_col2:
-            st.markdown(
-                f"""<div class="crd-card"><h4>🎯 Önerilen Aksiyon</h4>
-                <div class="crd-field"><b>Kampanya:</b> {cust['RecommendedCampaign']}</div>
-                <div class="crd-field"><b>Varsayılan Dönüşüm:</b> ~%{cust['SimulatedConversionRate']*100:.0f}</div>
-                <div class="crd-field"><b>Maliyet:</b> ${cust['CampaignCostPerCustomer']:.0f}/müşteri</div>
-                </div>""",
-                unsafe_allow_html=True,
-            )
-            st.markdown("<br>", unsafe_allow_html=True)
-            if st.button("✉️ Kişiselleştirilmiş SMS Oluştur", key=f"sms_btn_{cust['customerID']}"):
-                api_key = st.session_state.get("api_key", "")
-                if not api_key:
-                    st.error("Önce sol taraftaki panelden Anthropic API key'ini gir.")
-                elif not ANTHROPIC_AVAILABLE:
-                    st.error("`anthropic` kütüphanesi kurulu değil.")
-                else:
-                    with st.spinner("SMS oluşturuluyor..."):
-                        try:
-                            client = anthropic.Anthropic(api_key=api_key)
-                            prompt = f"""Sen bir telekom sirketinde deneyimli bir pazarlama metin yazarisin.
-Asagidaki musteri bilgisine gore, churn (musteri kaybi) riskini azaltmayi
-hedefleyen, SMS ile gonderilecek TEK bir mesaj yaz.
+tab_copilot = tab_map.get("🤖 AI Copilot")
+tab_alerts = tab_map.get("🔔 Canlı Uyarılar")
+tab_list = tab_map.get("📋 Müşteri Listesi")
+tab_roi = tab_map.get("💰 ROI Simülasyonu")
 
-Musteri verisi:
-- Segment: {cust['ChurnReasonSegment']}
-- Onerilen kampanya: {cust['RecommendedCampaign']}
-- Musterilik suresi: {cust['tenure']} ay
-- Aylik odeme: {cust['MonthlyCharges']:.0f} TL
-- Sozlesme tipi: {cust['Contract']}
-
-Kurallar (kesinlikle uy):
-1. SADECE nihai, temiz SMS metnini yaz. Ilk taslak, aciklama, alternatif,
-   dipnot, yildizli not (*), kendi kendini duzeltme YOK. Tek seferde dogru
-   ve son halini yaz.
-2. Turkce, sicak ama profesyonel bir ton kullan; abartili unlemlerden kacin.
-3. En fazla 2 cumle, toplamda 160 karakteri gecme.
-4. "Degerli musterimiz" ile basla, musteri adini kullanma.
-5. Musterilik suresini dogru say: {cust['tenure']} ay (yil degil, ay olarak
-   ifade et eger 12'den kucukse; 12 veya uzeriyse yil olarak da belirtebilirsin
-   ama sayiyi yanlis hesaplama).
-6. Kampanyayi somut ve net anlat, genel gecer laf kalabaligi yapma.
-7. Bir eylem cagrisi (CTA) ile bitir, ama KESINLIKLE soru cumlesi kurma
-   (soru isareti "?" kullanma). Emir kipiyle, net bir yonlendirme yap:
-   "Hemen aktif edin.", "Detaylar icin 444'u arayin.", "Kampanyadan
-   yararlanmak icin uygulamayi acin." gibi. Gercek bir telekom firmasinin
-   musteriye soru sorarak degil, yonlendirerek konustugunu unutma.
-
-Cikti SADECE SMS metni olsun, baska hicbir sey yazma."""
-                            response = client.messages.create(
-                                model="claude-sonnet-5", max_tokens=300,
-                                messages=[{"role": "user", "content": prompt}],
-                            )
-                            sms_text = "".join(b.text for b in response.content if b.type == "text").strip()
-                            st.session_state["generated_sms"][cust["customerID"]] = sms_text
-                        except Exception as e:
-                            st.error(f"SMS oluşturulurken hata oluştu: {e}")
-
-            if cust["customerID"] in st.session_state["generated_sms"]:
-                st.text_area(
-                    "Oluşturulan SMS", value=st.session_state["generated_sms"][cust["customerID"]],
-                    height=140, key=f"sms_text_{cust['customerID']}",
-                )
-
-with tab_list:
-    seg_summary = (
-        df.groupby("ChurnReasonSegment")
-        .agg(musteri_sayisi=("customerID", "count"), ortalama_risk=("ChurnRiskScore", "mean"))
-        .reset_index().sort_values("musteri_sayisi", ascending=False)
-    )
-    g1, g2 = st.columns([1, 1])
-    with g1:
-        st.caption("Segment Dağılımı")
-        st.bar_chart(seg_summary.set_index("ChurnReasonSegment")["musteri_sayisi"], color="#7B5CF5")
-    with g2:
-        st.caption("Segment Bazlı Ortalama Risk")
-        st.bar_chart(seg_summary.set_index("ChurnReasonSegment")["ortalama_risk"], color="#E8577A")
-
-    st.markdown(f"#### Müşteri Listesi — {selected_segment}")
-    display_df = filtered.head(200).copy()
-    display_df["Risk"] = display_df["ChurnRiskScore"].apply(lambda x: f"{x*100:.0f}%")
-    display_df["Tahmini CLV"] = display_df["EstimatedCLV"].apply(lambda x: f"${x:,.0f}")
-    display_df["Varsayılan Dönüşüm"] = display_df["SimulatedConversionRate"].apply(lambda x: f"~{x*100:.0f}%")
-    st.dataframe(
-        display_df[[
-            "customerID", "Risk", "ChurnReasonSegment", "RecommendedCampaign",
-            "Varsayılan Dönüşüm", "Tahmini CLV", "tenure", "MonthlyCharges",
-        ]].rename(columns={
-            "customerID": "Müşteri ID", "ChurnReasonSegment": "Segment",
-            "RecommendedCampaign": "Önerilen Kampanya", "tenure": "Tenure (ay)",
-            "MonthlyCharges": "Aylık Ücret",
-        }),
-        use_container_width=True, height=460,
-    )
-    st.caption("* Dönüşüm oranları varsayımsaldır. Risk skoru Random Forest modeliyle üretilmiştir (AUC 0.84).")
-    st.download_button(
-        "⬇ Filtrelenen Listeyi CSV Olarak İndir",
-        data=filtered.to_csv(index=False).encode("utf-8"),
-        file_name=f"churn_segment_{selected_segment.replace(' ', '_')}.csv", mime="text/csv",
-    )
-
-with tab_roi:
-    st.caption(
-        "Seçtiğin segmentteki riskli müşterilere kampanyayı uygularsak ne kazanırız? "
-        "Varsayılan maliyet/dönüşüm oranlarını değiştirip senaryoyu test edebilirsin."
-    )
-    roi_col1, roi_col2 = st.columns([1, 2])
-    with roi_col1:
-        roi_segment = st.selectbox(
-            "Simülasyon için segment", sorted(df["ChurnReasonSegment"].unique().tolist()), key="roi_segment"
+if tab_copilot:
+    with tab_copilot:
+        st.caption(
+            "Veri hakkında doğal dilde soru sor — cevaplar gerçek veriden (en riskli müşteriler, "
+            "segment istatistikleri) türetilir, uydurma değildir."
         )
-        roi_risk_threshold = st.slider("Hedef kitle: minimum risk skoru", 0.0, 1.0, 0.5, 0.05, key="roi_risk")
-        seg_df = df[(df["ChurnReasonSegment"] == roi_segment) & (df["ChurnRiskScore"] >= roi_risk_threshold)]
-        default_cost = float(seg_df["CampaignCostPerCustomer"].iloc[0]) if len(seg_df) > 0 else 10.0
-        default_conv = float(seg_df["SimulatedConversionRate"].iloc[0]) if len(seg_df) > 0 else 0.2
-        campaign_cost = st.slider("Müşteri başı kampanya maliyeti ($)", 0.0, 50.0, default_cost, 1.0, key="roi_cost")
-        conversion_rate = st.slider(
-            "Varsayılan dönüşüm oranı (%)", 0, 100, int(default_conv * 100), 1, key="roi_conv"
-        ) / 100
-    with roi_col2:
-        n_targeted = len(seg_df)
-        avg_clv = seg_df["EstimatedCLV"].mean() if n_targeted > 0 else 0
-        expected_retained = n_targeted * conversion_rate
-        revenue_saved = expected_retained * avg_clv
-        total_cost = n_targeted * campaign_cost
-        net_roi = revenue_saved - total_cost
-        roi_multiplier = (revenue_saved / total_cost) if total_cost > 0 else 0
-        m1, m2, m3 = st.columns(3)
-        m1.metric("Hedeflenen Müşteri", f"{n_targeted:,}")
-        m2.metric("Beklenen Kurtarılan Müşteri", f"{expected_retained:,.0f}")
-        m3.metric("Ortalama CLV", f"${avg_clv:,.0f}")
-        m4, m5, m6 = st.columns(3)
-        m4.metric("Toplam Kampanya Maliyeti", f"${total_cost:,.0f}")
-        m5.metric("Kurtarılan Gelir", f"${revenue_saved:,.0f}")
-        m6.metric("Net ROI", f"${net_roi:,.0f}", delta=f"{roi_multiplier:.1f}x" if total_cost > 0 else None)
-        if total_cost > 0:
-            if net_roi > 0:
-                st.success(f"Bu senaryoda kampanya kârlı: her 1$ maliyete karşılık ~{roi_multiplier:.1f}$ gelir kurtarılıyor.")
+
+        example_questions = [
+            "Bugün kimi aramalıyız?",
+            "Hangi segment en riskli?",
+            "En değerli riskli müşteriler kim?",
+            "Hangi kampanya en kârlı?",
+        ]
+        ex_cols = st.columns(len(example_questions))
+        for i, q in enumerate(example_questions):
+            if ex_cols[i].button(q, key=f"ex_q_{i}", use_container_width=True):
+                st.session_state["copilot_question"] = q
+
+        user_question = st.text_input(
+            "Sorunu yaz",
+            value=st.session_state.get("copilot_question", ""),
+            placeholder="Örn: Bugün hangi 5 müşteriyi aramalıyız ve neden?",
+            key="copilot_input",
+        )
+
+        if st.button("🔍 Sor", key="copilot_ask"):
+            api_key = st.session_state.get("api_key", "")
+            if not user_question.strip():
+                st.warning("Önce bir soru yaz.")
+            elif not api_key:
+                st.error("Önce sol taraftaki panelden Anthropic API key'ini gir.")
+            elif not ANTHROPIC_AVAILABLE:
+                st.error("`anthropic` kütüphanesi kurulu değil.")
             else:
-                st.warning("Bu senaryoda kampanya maliyeti, kurtarılan gelirden fazla.")
-    st.caption(
-        "* Bu simülasyon varsayımsal maliyet ve dönüşüm oranlarına dayanır. Gerçek kampanya "
-        "sonuçları geldiğinde bu değerler güncellenmeli."
-    )
+                with st.spinner("Veriler analiz ediliyor..."):
+                    try:
+                        # Gercek veriden bir baglam ozeti olustur (model bu sayilarin disina cikmasin diye)
+                        seg_stats = (
+                            df.groupby("ChurnReasonSegment")
+                            .agg(
+                                musteri=("customerID", "count"),
+                                ort_risk=("ChurnRiskScore", "mean"),
+                                toplam_clv=("EstimatedCLV", "sum"),
+                                ort_donusum=("SimulatedConversionRate", "mean"),
+                            )
+                            .round(3)
+                            .to_string()
+                        )
+                        top10 = (
+                            df[df["ChurnRiskScore"] > 0.5]
+                            .sort_values("EstimatedCLV", ascending=False)
+                            .head(10)[[
+                                "customerID", "ChurnRiskScore", "ChurnReasonSegment",
+                                "RecommendedCampaign", "EstimatedCLV", "tenure",
+                            ]]
+                            .round(3)
+                            .to_string(index=False)
+                        )
+
+                        context = f"""Asagida gercek veriden turetilmis ozet tablolar var. SADECE bu
+    verilere dayanarak cevap ver, bu verilerin disinda sayi/istatistik uydurma.
+
+    --- SEGMENT ISTATISTIKLERI ---
+    {seg_stats}
+
+    --- YUKSEK RISKLI (risk>0.5), EN DEGERLI 10 MUSTERI (CLV'ye gore siralanmis) ---
+    {top10}
+
+    --- TOPLAM ---
+    Toplam musteri: {len(df)}
+    Yuksek riskli musteri (>0.5): {len(df[df['ChurnRiskScore'] > 0.5])}
+    Riskteki toplam tahmini CLV: ${df[df['ChurnRiskScore'] > 0.5]['EstimatedCLV'].sum():,.0f}
+
+    Kullanicinin sorusu: {user_question}
+
+    Kurallar:
+    - Turkce cevap ver, kisa ve net ol (max 5-6 cumle veya kisa madde listesi).
+    - Cevabini SADECE yukaridaki tablolardan cikar, tahmin/uydurma yapma.
+    - Somut musteri ID'leri, segment isimleri, sayilar kullan.
+    - Eger soru tablolarda cevaplanamayacak bir sey soruyorsa, bunu acikca belirt."""
+
+                        client = anthropic.Anthropic(api_key=api_key)
+                        response = client.messages.create(
+                            model="claude-sonnet-5",
+                            max_tokens=600,
+                            messages=[{"role": "user", "content": context}],
+                        )
+                        answer = "".join(b.text for b in response.content if b.type == "text").strip()
+                        st.session_state["copilot_answer"] = answer
+                    except Exception as e:
+                        st.error(f"Cevap üretilirken hata oluştu: {e}")
+
+        if st.session_state.get("copilot_answer"):
+            st.markdown(
+                f"""<div class="crd-ai-card">
+                <div class="crd-ai-eyebrow">🤖 AI Copilot Yanıtı</div>
+                <div style="color:#E4E7F5; font-size:15px; line-height:1.7; white-space:pre-wrap;">{st.session_state['copilot_answer']}</div>
+                </div>""",
+                unsafe_allow_html=True,
+            )
+
+if tab_alerts:
+    with tab_alerts:
+        st.caption(
+            "Gerçek zamanlı bir CRM entegrasyonunda bu akış otomatik dolar. MVP'de yeni "
+            "uyarıyı simüle etmek için butona tıkla."
+        )
+        c1, c2 = st.columns([1, 3])
+        with c1:
+            if st.button("🆕 Yeni Uyarı Simüle Et", use_container_width=True):
+                already_alerted = {a["customerID"] for a in st.session_state["alert_feed"]}
+                candidates = df[df["ChurnRiskScore"] > 0.5]
+                if selected_segment != "Tümü":
+                    candidates = candidates[candidates["ChurnReasonSegment"] == selected_segment]
+                candidates = candidates[~candidates["customerID"].isin(already_alerted)]
+
+                if len(candidates) > 0:
+                    new_id = candidates.sample(1)["customerID"].iloc[0]
+                    st.session_state["alert_feed"].insert(
+                        0, {"customerID": new_id, "time": datetime.datetime.now().strftime("%H:%M:%S")}
+                    )
+                    st.session_state["selected_customer"] = new_id  # yeni uyarı otomatik acilsin
+                else:
+                    st.info(
+                        f"'{selected_segment}' segmentinde daha önce gösterilmemiş yüksek riskli "
+                        "müşteri kalmadı. Sol panelden segmenti değiştirebilirsin."
+                    )
+        with c2:
+            st.caption(f"Şu an seçili segment: **{selected_segment}** (sol panelden değiştirebilirsin)")
+
+        if not st.session_state["alert_feed"]:
+            st.info("Henüz uyarı yok. 'Yeni Uyarı Simüle Et' butonuna tıkla.")
+        elif len(st.session_state["alert_feed"]) > 1:
+            with st.expander(f"📜 Geçmiş uyarılar ({len(st.session_state['alert_feed']) - 1})"):
+                for alert in st.session_state["alert_feed"][1:8]:
+                    cust = df[df["customerID"] == alert["customerID"]].iloc[0]
+                    risk_pct = cust["ChurnRiskScore"] * 100
+                    icon = "🔴" if risk_pct > 60 else "🟡"
+                    label = f"{icon} [{alert['time']}] {cust['customerID']} — {cust['ChurnReasonSegment']} — Risk %{risk_pct:.0f}"
+                    if st.button(label, key=f"alert_{alert['customerID']}_{alert['time']}"):
+                        st.session_state["selected_customer"] = cust["customerID"]
+
+        if st.session_state["selected_customer"]:
+            cust = df[df["customerID"] == st.session_state["selected_customer"]].iloc[0]
+            st.markdown("<br>", unsafe_allow_html=True)
+            card_col1, card_col2 = st.columns([1, 1])
+            with card_col1:
+                st.markdown(
+                    f"""<div class="crd-card"><h4>👤 Müşteri Profili</h4>
+                    <div class="crd-field"><b>ID:</b> {cust['customerID']}</div>
+                    <div class="crd-field"><b>Risk:</b> {risk_badge_html(cust['ChurnRiskScore'])}</div>
+                    <div class="crd-field"><b>Segment:</b> {cust['ChurnReasonSegment']}</div>
+                    <div class="crd-field"><b>Tenure:</b> {cust['tenure']} ay</div>
+                    <div class="crd-field"><b>Aylık Ücret:</b> ${cust['MonthlyCharges']:.2f}</div>
+                    <div class="crd-field"><b>Sözleşme:</b> {cust['Contract']}</div>
+                    <div class="crd-field"><b>İnternet:</b> {cust['InternetService']}</div>
+                    <div class="crd-field"><b>Tahmini CLV:</b> ${cust['EstimatedCLV']:,.0f}</div>
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
+            with card_col2:
+                st.markdown(
+                    f"""<div class="crd-card"><h4>🎯 Önerilen Aksiyon</h4>
+                    <div class="crd-field"><b>Kampanya:</b> {cust['RecommendedCampaign']}</div>
+                    <div class="crd-field"><b>Varsayılan Dönüşüm:</b> ~%{cust['SimulatedConversionRate']*100:.0f}</div>
+                    <div class="crd-field"><b>Maliyet:</b> ${cust['CampaignCostPerCustomer']:.0f}/müşteri</div>
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
+                st.markdown("<br>", unsafe_allow_html=True)
+                if st.button("✉️ Kişiselleştirilmiş SMS Oluştur", key=f"sms_btn_{cust['customerID']}"):
+                    api_key = st.session_state.get("api_key", "")
+                    if not api_key:
+                        st.error("Önce sol taraftaki panelden Anthropic API key'ini gir.")
+                    elif not ANTHROPIC_AVAILABLE:
+                        st.error("`anthropic` kütüphanesi kurulu değil.")
+                    else:
+                        with st.spinner("SMS oluşturuluyor..."):
+                            try:
+                                client = anthropic.Anthropic(api_key=api_key)
+                                prompt = f"""Sen bir telekom sirketinde deneyimli bir pazarlama metin yazarisin.
+    Asagidaki musteri bilgisine gore, churn (musteri kaybi) riskini azaltmayi
+    hedefleyen, SMS ile gonderilecek TEK bir mesaj yaz.
+
+    Musteri verisi:
+    - Segment: {cust['ChurnReasonSegment']}
+    - Onerilen kampanya: {cust['RecommendedCampaign']}
+    - Musterilik suresi: {cust['tenure']} ay
+    - Aylik odeme: {cust['MonthlyCharges']:.0f} TL
+    - Sozlesme tipi: {cust['Contract']}
+
+    Kurallar (kesinlikle uy):
+    1. SADECE nihai, temiz SMS metnini yaz. Ilk taslak, aciklama, alternatif,
+       dipnot, yildizli not (*), kendi kendini duzeltme YOK. Tek seferde dogru
+       ve son halini yaz.
+    2. Turkce, sicak ama profesyonel bir ton kullan; abartili unlemlerden kacin.
+    3. En fazla 2 cumle, toplamda 160 karakteri gecme.
+    4. "Degerli musterimiz" ile basla, musteri adini kullanma.
+    5. Musterilik suresini dogru say: {cust['tenure']} ay (yil degil, ay olarak
+       ifade et eger 12'den kucukse; 12 veya uzeriyse yil olarak da belirtebilirsin
+       ama sayiyi yanlis hesaplama).
+    6. Kampanyayi somut ve net anlat, genel gecer laf kalabaligi yapma.
+    7. Bir eylem cagrisi (CTA) ile bitir, ama KESINLIKLE soru cumlesi kurma
+       (soru isareti "?" kullanma). Emir kipiyle, net bir yonlendirme yap:
+       "Hemen aktif edin.", "Detaylar icin 444'u arayin.", "Kampanyadan
+       yararlanmak icin uygulamayi acin." gibi. Gercek bir telekom firmasinin
+       musteriye soru sorarak degil, yonlendirerek konustugunu unutma.
+
+    Cikti SADECE SMS metni olsun, baska hicbir sey yazma."""
+                                response = client.messages.create(
+                                    model="claude-sonnet-5", max_tokens=300,
+                                    messages=[{"role": "user", "content": prompt}],
+                                )
+                                sms_text = "".join(b.text for b in response.content if b.type == "text").strip()
+                                st.session_state["generated_sms"][cust["customerID"]] = sms_text
+                            except Exception as e:
+                                st.error(f"SMS oluşturulurken hata oluştu: {e}")
+
+                if cust["customerID"] in st.session_state["generated_sms"]:
+                    st.text_area(
+                        "Oluşturulan SMS", value=st.session_state["generated_sms"][cust["customerID"]],
+                        height=140, key=f"sms_text_{cust['customerID']}",
+                    )
+
+if tab_list:
+    with tab_list:
+        seg_summary = (
+            df.groupby("ChurnReasonSegment")
+            .agg(musteri_sayisi=("customerID", "count"), ortalama_risk=("ChurnRiskScore", "mean"))
+            .reset_index().sort_values("musteri_sayisi", ascending=False)
+        )
+        g1, g2 = st.columns([1, 1])
+        with g1:
+            st.caption("Segment Dağılımı")
+            st.bar_chart(seg_summary.set_index("ChurnReasonSegment")["musteri_sayisi"], color="#7B5CF5")
+        with g2:
+            st.caption("Segment Bazlı Ortalama Risk")
+            st.bar_chart(seg_summary.set_index("ChurnReasonSegment")["ortalama_risk"], color="#E8577A")
+
+        st.markdown(f"#### Müşteri Listesi — {selected_segment}")
+        display_df = filtered.head(200).copy()
+        display_df["Risk"] = display_df["ChurnRiskScore"].apply(lambda x: f"{x*100:.0f}%")
+        display_df["Tahmini CLV"] = display_df["EstimatedCLV"].apply(lambda x: f"${x:,.0f}")
+        display_df["Varsayılan Dönüşüm"] = display_df["SimulatedConversionRate"].apply(lambda x: f"~{x*100:.0f}%")
+        st.dataframe(
+            display_df[[
+                "customerID", "Risk", "ChurnReasonSegment", "RecommendedCampaign",
+                "Varsayılan Dönüşüm", "Tahmini CLV", "tenure", "MonthlyCharges",
+            ]].rename(columns={
+                "customerID": "Müşteri ID", "ChurnReasonSegment": "Segment",
+                "RecommendedCampaign": "Önerilen Kampanya", "tenure": "Tenure (ay)",
+                "MonthlyCharges": "Aylık Ücret",
+            }),
+            use_container_width=True, height=460,
+        )
+        st.caption("* Dönüşüm oranları varsayımsaldır. Risk skoru Random Forest modeliyle üretilmiştir (AUC 0.84).")
+        st.download_button(
+            "⬇ Filtrelenen Listeyi CSV Olarak İndir",
+            data=filtered.to_csv(index=False).encode("utf-8"),
+            file_name=f"churn_segment_{selected_segment.replace(' ', '_')}.csv", mime="text/csv",
+        )
+
+if tab_roi:
+    with tab_roi:
+        st.caption(
+            "Seçtiğin segmentteki riskli müşterilere kampanyayı uygularsak ne kazanırız? "
+            "Varsayılan maliyet/dönüşüm oranlarını değiştirip senaryoyu test edebilirsin."
+        )
+        roi_col1, roi_col2 = st.columns([1, 2])
+        with roi_col1:
+            roi_segment = st.selectbox(
+                "Simülasyon için segment", sorted(df["ChurnReasonSegment"].unique().tolist()), key="roi_segment"
+            )
+            roi_risk_threshold = st.slider("Hedef kitle: minimum risk skoru", 0.0, 1.0, 0.5, 0.05, key="roi_risk")
+            seg_df = df[(df["ChurnReasonSegment"] == roi_segment) & (df["ChurnRiskScore"] >= roi_risk_threshold)]
+            default_cost = float(seg_df["CampaignCostPerCustomer"].iloc[0]) if len(seg_df) > 0 else 10.0
+            default_conv = float(seg_df["SimulatedConversionRate"].iloc[0]) if len(seg_df) > 0 else 0.2
+            campaign_cost = st.slider("Müşteri başı kampanya maliyeti ($)", 0.0, 50.0, default_cost, 1.0, key="roi_cost")
+            conversion_rate = st.slider(
+                "Varsayılan dönüşüm oranı (%)", 0, 100, int(default_conv * 100), 1, key="roi_conv"
+            ) / 100
+        with roi_col2:
+            n_targeted = len(seg_df)
+            avg_clv = seg_df["EstimatedCLV"].mean() if n_targeted > 0 else 0
+            expected_retained = n_targeted * conversion_rate
+            revenue_saved = expected_retained * avg_clv
+            total_cost = n_targeted * campaign_cost
+            net_roi = revenue_saved - total_cost
+            roi_multiplier = (revenue_saved / total_cost) if total_cost > 0 else 0
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Hedeflenen Müşteri", f"{n_targeted:,}")
+            m2.metric("Beklenen Kurtarılan Müşteri", f"{expected_retained:,.0f}")
+            m3.metric("Ortalama CLV", f"${avg_clv:,.0f}")
+            m4, m5, m6 = st.columns(3)
+            m4.metric("Toplam Kampanya Maliyeti", f"${total_cost:,.0f}")
+            m5.metric("Kurtarılan Gelir", f"${revenue_saved:,.0f}")
+            m6.metric("Net ROI", f"${net_roi:,.0f}", delta=f"{roi_multiplier:.1f}x" if total_cost > 0 else None)
+            if total_cost > 0:
+                if net_roi > 0:
+                    st.success(f"Bu senaryoda kampanya kârlı: her 1$ maliyete karşılık ~{roi_multiplier:.1f}$ gelir kurtarılıyor.")
+                else:
+                    st.warning("Bu senaryoda kampanya maliyeti, kurtarılan gelirden fazla.")
+        st.caption(
+            "* Bu simülasyon varsayımsal maliyet ve dönüşüm oranlarına dayanır. Gerçek kampanya "
+            "sonuçları geldiğinde bu değerler güncellenmeli."
+        )
