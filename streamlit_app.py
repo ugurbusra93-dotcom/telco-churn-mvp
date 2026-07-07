@@ -186,15 +186,26 @@ st.markdown(
     .crd-field { font-size:14px; margin-bottom:8px; color:#A8AEC7; }
     .crd-field b { color:#F5F6FD; }
 
-    .stButton button {
-        border-radius:12px; font-weight:600; font-family:'Inter',sans-serif;
+    .stButton button[kind="primary"] {
+        border-radius:12px; font-weight:700; font-family:'Inter',sans-serif;
         background: linear-gradient(90deg, #7C5CFF, #22D3EE) !important;
         color:#070B1F !important; border:none !important;
         transition: box-shadow .2s ease, transform .15s ease;
     }
-    .stButton button:hover {
+    .stButton button[kind="primary"]:hover {
         box-shadow: 0 0 24px rgba(124,92,255,.5);
         transform: translateY(-1px);
+    }
+    .stButton button[kind="secondary"] {
+        border-radius:12px; font-weight:600; font-family:'Inter',sans-serif;
+        background: rgba(17,24,45,.6) !important;
+        color:#A8AEC7 !important; border:1px solid rgba(255,255,255,.1) !important;
+        transition: all .15s ease;
+    }
+    .stButton button[kind="secondary"]:hover {
+        background: rgba(124,92,255,.15) !important;
+        color:#F5F6FD !important;
+        border-color: rgba(124,92,255,.3) !important;
     }
 
     /* Sidebar */
@@ -226,17 +237,12 @@ st.markdown(
         border-radius:14px !important;
     }
 
-    /* Rol secici - segmented control gorunumu */
-    div[role="radiogroup"] {
-        display:flex; justify-content:center; gap:6px;
-        background: rgba(17,24,45,.7); padding:6px; border-radius:14px;
-        border:1px solid rgba(255,255,255,.06); backdrop-filter: blur(12px);
+    /* Rol secici basliklari */
+    .role-selector-label {
+        text-align:center; font-family:'IBM Plex Mono', monospace; font-size:11px;
+        letter-spacing:.14em; text-transform:uppercase; color:#7076A3; margin-bottom:10px;
+        font-weight:600;
     }
-    div[role="radiogroup"] label {
-        border-radius:10px; padding:8px 18px; transition: all .15s ease; cursor:pointer;
-    }
-    div[role="radiogroup"] label:hover { background: rgba(124,92,255,.1); }
-    div[role="radiogroup"] label div:first-child { display:none; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -287,36 +293,68 @@ def load_data():
 
 df = load_data()
 
-render_html(
-    """
-    <div class="crd-header">
-        <div class="crd-brand-row">
-            <div class="crd-brand-badge">◈</div>
-            <div>
-                <div class="crd-eyebrow">Churn Simulator AI</div>
-                <div class="crd-title">Campaign Intelligence Dashboard</div>
-            </div>
+import base64
+
+
+def get_logo_base64():
+    logo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logo.jpeg")
+    if os.path.exists(logo_path):
+        with open(logo_path, "rb") as f:
+            return base64.b64encode(f.read()).decode("utf-8")
+    return None
+
+
+_logo_b64 = get_logo_base64()
+if _logo_b64:
+    render_html(
+        f"""
+        <div class="crd-header" style="text-align:center;">
+            <img src="data:image/jpeg;base64,{_logo_b64}"
+                 style="width:110px; height:110px; border-radius:20px; margin-bottom:14px;
+                        box-shadow:0 0 30px rgba(124,92,255,.25);" />
+            <div class="crd-tagline" style="font-size:15px;">Predict. Personalize. Retain.</div>
         </div>
-        <div class="crd-tagline">Predict. Personalize. Retain.</div>
-        <div class="crd-sub">Telco Churn Dataset · 7.043 müşteri · Model AUC 0.84</div>
-    </div>
-    """
-)
+        """
+    )
+else:
+    render_html(
+        """
+        <div class="crd-header" style="text-align:center;">
+            <div class="crd-brand-row" style="justify-content:center;">
+                <div class="crd-brand-badge">◈</div>
+                <div class="crd-eyebrow" style="margin:0; font-size:15px;">Churn Simulator AI</div>
+            </div>
+            <div class="crd-tagline" style="font-size:15px; margin-top:14px;">Predict. Personalize. Retain.</div>
+        </div>
+        """
+    )
 
 # ---------- Rol secici ----------
-ROLES = {
-    "👔 Yönetici": "executive",
-    "📣 Pazarlama Ekibi": "marketing",
-    "🎯 Retention Manager": "retention",
-}
-selected_role_label = st.radio(
-    "Rolünü seç",
-    list(ROLES.keys()),
-    horizontal=True,
-    label_visibility="collapsed",
-    key="role_selector",
-)
-user_role = ROLES[selected_role_label]
+ROLES = [
+    ("👔 Yönetici", "executive"),
+    ("📣 Pazarlama Ekibi", "marketing"),
+    ("🎯 Retention Manager", "retention"),
+]
+
+if "user_role" not in st.session_state:
+    st.session_state["user_role"] = "executive"
+
+render_html('<div class="role-selector-label">Rolünü Seç</div>')
+
+_role_cols = st.columns(len(ROLES))
+for _col, (_label, _value) in zip(_role_cols, ROLES):
+    with _col:
+        is_active = st.session_state["user_role"] == _value
+        if st.button(
+            _label,
+            key=f"role_btn_{_value}",
+            use_container_width=True,
+            type="primary" if is_active else "secondary",
+        ):
+            st.session_state["user_role"] = _value
+            st.rerun()
+
+user_role = st.session_state["user_role"]
 
 _env_api_key = os.environ.get("ANTHROPIC_API_KEY", "")
 if _env_api_key:
@@ -501,7 +539,7 @@ if user_role == "executive":
     ai_col1, ai_col2 = st.columns([5, 1])
     with ai_col2:
         st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-        refresh_clicked = st.button("🔄 AI Özeti Üret", key="refresh_exec_summary", use_container_width=True)
+        refresh_clicked = st.button("🔄 AI Özeti Üret", key="refresh_exec_summary", use_container_width=True, type="primary")
 
     if refresh_clicked:
         api_key = st.session_state.get("api_key", "")
@@ -618,7 +656,7 @@ if tab_copilot:
             key="copilot_input",
         )
 
-        if st.button("🔍 Sor", key="copilot_ask"):
+        if st.button("🔍 Sor", key="copilot_ask", type="primary"):
             api_key = st.session_state.get("api_key", "")
             if not user_question.strip():
                 st.warning("Önce bir soru yaz.")
@@ -697,7 +735,7 @@ if tab_alerts:
         )
         c1, c2 = st.columns([1, 3])
         with c1:
-            if st.button("🆕 Yeni Uyarı Simüle Et", use_container_width=True):
+            if st.button("🆕 Yeni Uyarı Simüle Et", use_container_width=True, type="primary"):
                 already_alerted = {a["customerID"] for a in st.session_state["alert_feed"]}
                 candidates = df[df["ChurnRiskScore"] > 0.5]
                 if selected_segment != "Tümü":
@@ -756,7 +794,7 @@ if tab_alerts:
                     </div>"""
                 )
                 st.markdown("<br>", unsafe_allow_html=True)
-                if st.button("✉️ Kişiselleştirilmiş SMS Oluştur", key=f"sms_btn_{cust['customerID']}"):
+                if st.button("✉️ Kişiselleştirilmiş SMS Oluştur", key=f"sms_btn_{cust['customerID']}", type="primary"):
                     api_key = st.session_state.get("api_key", "")
                     if not api_key:
                         st.error("Önce sol taraftaki panelden Anthropic API key'ini gir.")
