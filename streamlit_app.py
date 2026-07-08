@@ -229,6 +229,15 @@ st.markdown(
     }
     section[data-testid="stSidebar"] [data-baseweb="select"] span { color: #F5F6FD !important; }
     section[data-testid="stSidebar"] svg { fill: #A8AEC7 !important; }
+    /* Daha agresif kapsama - Streamlit surumune gore ic yapı degisebiliyor */
+    section[data-testid="stSidebar"] div[data-baseweb="select"],
+    section[data-testid="stSidebar"] div[data-baseweb="select"] div {
+        background-color: rgba(17,24,45,.95) !important;
+        color: #F5F6FD !important;
+    }
+    section[data-testid="stSidebar"] div[data-baseweb="select"] input {
+        color: #F5F6FD !important;
+    }
     section[data-testid="stSidebar"] hr { border-color: rgba(255,255,255,.08); }
 
     /* Tablo */
@@ -248,6 +257,11 @@ st.markdown(
         border-radius:10px !important;
     }
     div[data-baseweb="select"] span { color: #F5F6FD !important; }
+    div[data-baseweb="select"],
+    div[data-baseweb="select"] div {
+        background-color: rgba(17,24,45,.95) !important;
+        color: #F5F6FD !important;
+    }
     div[data-baseweb="popover"] { background: #11182D !important; }
     div[data-baseweb="popover"] li { color: #E4E7F5 !important; }
     div[data-baseweb="popover"] li:hover { background: rgba(124,92,255,.15) !important; }
