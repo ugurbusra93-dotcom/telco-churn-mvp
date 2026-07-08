@@ -992,10 +992,13 @@ elif active_tab == "🔔 Canlı Uyarılar":
                 elif not ANTHROPIC_AVAILABLE:
                     st.error("`anthropic` kütüphanesi kurulu değil.")
                 else:
-                    with st.spinner("SMS oluşturuluyor..."):
+                    with st.spinner("Sinyo SMS hazırlıyor..."):
                         try:
                             client = anthropic.Anthropic(api_key=api_key)
-                            prompt = f"""Sen bir telekom sirketinde deneyimli bir pazarlama metin yazarisin.
+                            prompt = f"""Senin adin Sinyo. Bir telekom sirketinin akilli, sicak ama
+    profesyonel yapay zeka asistanisin. Musteriye gonderilecek SMS'i SEN yaziyorsun,
+    yani mesaj senin agzindan, senin imzanla gidiyor.
+
     Asagidaki musteri bilgisine gore, churn (musteri kaybi) riskini azaltmayi
     hedefleyen, SMS ile gonderilecek TEK bir mesaj yaz.
 
@@ -1010,18 +1013,24 @@ elif active_tab == "🔔 Canlı Uyarılar":
     1. SADECE nihai, temiz SMS metnini yaz. Ilk taslak, aciklama, alternatif,
        dipnot, yildizli not (*), kendi kendini duzeltme YOK. Tek seferde dogru
        ve son halini yaz.
-    2. Turkce, sicak ama profesyonel bir ton kullan; abartili unlemlerden kacin.
-    3. En fazla 2 cumle, toplamda 160 karakteri gecme.
-    4. "Degerli musterimiz" ile basla, musteri adini kullanma.
-    5. Musterilik suresini dogru say: {cust['tenure']} ay (yil degil, ay olarak
-       ifade et eger 12'den kucukse; 12 veya uzeriyse yil olarak da belirtebilirsin
-       ama sayiyi yanlis hesaplama).
-    6. Kampanyayi somut ve net anlat, genel gecer laf kalabaligi yapma.
+    2. "Sinyo" imzasiyla veya Sinyo'nun konustugunu hissettiren bir uslupla yaz -
+       samimi, enerjik ama saygili bir robot asistan tonu (ornek stil: "Sana ozel
+       bir firsat buldum!", "Senin icin ayarladim", "Hemen aktif et" gibi dogrudan,
+       kisisel bir dil).
+    3. Turkce yaz, abartili unlemden kacin ama enerjik ol.
+    4. En fazla 2-3 cumle, toplamda 200 karakteri gecme.
+    5. Onerilen kampanyayi SOMUT bir rakamla anlat (yuzde indirim, ay sayisi gibi -
+       {cust['RecommendedCampaign']} icindeki bilgiyi kullan).
+    6. Musterilik suresini dogru say: {cust['tenure']} ay (yil degil, ay olarak
+       ifade et eger 12'den kucukse).
     7. Bir eylem cagrisi (CTA) ile bitir, ama KESINLIKLE soru cumlesi kurma
-       (soru isareti "?" kullanma). Emir kipiyle, net bir yonlendirme yap:
-       "Hemen aktif edin.", "Detaylar icin 444'u arayin.", "Kampanyadan
-       yararlanmak icin uygulamayi acin." gibi. Gercek bir telekom firmasinin
-       musteriye soru sorarak degil, yonlendirerek konustugunu unutma.
+       (soru isareti "?" kullanma). Emir kipiyle, net ve aciliyet hissi veren bir
+       yonlendirme yap: "Hemen aktif et.", "Vakit kaybetmeden uygulamayi ac.",
+       "Bu firsati kacirma, hemen basvur." gibi.
+
+    Ornek stil (bunu birebir kopyalama, sadece tonu anla):
+    "Merhaba! Ben Sinyo. Senin icin ozel bir firsat buldum: [kampanya] ile %15 indirim
+    tanimladik. Vakit kaybetmeden hemen uygulamaya gir ve firsati kacirma."
 
     Cikti SADECE SMS metni olsun, baska hicbir sey yazma."""
                             response = client.messages.create(
@@ -1029,9 +1038,14 @@ elif active_tab == "🔔 Canlı Uyarılar":
                                 messages=[{"role": "user", "content": prompt}],
                             )
                             sms_text = "".join(b.text for b in response.content if b.type == "text").strip()
+                            if not sms_text:
+                                st.warning(
+                                    "API cevap verdi ama SMS metni boş geldi. "
+                                    f"Ham cevap: {response.content}"
+                                )
                             st.session_state["generated_sms"][cust["customerID"]] = sms_text
                         except Exception as e:
-                            st.error(f"SMS oluşturulurken hata oluştu: {e}")
+                            st.error(f"SMS oluşturulurken hata oluştu: {type(e).__name__}: {e}")
 
             if cust["customerID"] in st.session_state["generated_sms"]:
                 st.text_area(
@@ -1073,6 +1087,99 @@ elif active_tab == "📋 Müşteri Listesi":
             _dark_bar_chart("ChurnReasonSegment", "ortalama_risk", "#FF5D8F", "Ortalama Risk", y_is_pct=True),
             use_container_width=True, config={"displayModeBar": False},
         )
+
+    st.markdown("##### Müşteri Akışı: Segment → Risk Seviyesi → Kampanya Sonucu")
+    st.caption(
+        "İlk iki aşama (Segment, Risk Seviyesi) doğrudan gerçek veriden. Üçüncü aşama "
+        "(Kampanya Sonucu) sadece **Yüksek Risk** grubu için, varsayımsal dönüşüm "
+        "oranlarına göre **beklenen** bir dağılımdır — gerçek kampanya sonucu değildir."
+    )
+
+    @st.cache_data
+    def build_sankey_data(df):
+        def _risk_level(r):
+            if r > 0.6:
+                return "🔴 Yüksek Risk"
+            elif r > 0.3:
+                return "🟡 Orta Risk"
+            return "🟢 Düşük Risk"
+
+        _sk = df.copy()
+        _sk["RiskLevel"] = _sk["ChurnRiskScore"].apply(_risk_level)
+
+        segments = sorted(_sk["ChurnReasonSegment"].unique().tolist())
+        risk_levels = ["🟢 Düşük Risk", "🟡 Orta Risk", "🔴 Yüksek Risk"]
+        outcomes = ["✅ Beklenen Kurtarılan", "⚠️ Beklenen Kayıp", "➖ Kampanya Gerekmiyor"]
+
+        all_nodes = segments + risk_levels + outcomes
+        node_idx = {name: i for i, name in enumerate(all_nodes)}
+
+        sources, targets, values, link_colors = [], [], [], []
+        seg_colors = ["#7C5CFF", "#22D3EE", "#4ADE80", "#FF5D8F", "#F59E0B", "#A78BFA"]
+        seg_color_map = {s: seg_colors[i % len(seg_colors)] for i, s in enumerate(segments)}
+
+        # Asama 1: Segment -> Risk Seviyesi
+        for seg in segments:
+            for rl in risk_levels:
+                cnt = len(_sk[(_sk["ChurnReasonSegment"] == seg) & (_sk["RiskLevel"] == rl)])
+                if cnt > 0:
+                    sources.append(node_idx[seg])
+                    targets.append(node_idx[rl])
+                    values.append(cnt)
+                    link_colors.append(seg_color_map[seg] + "55")
+
+        # Asama 2: Risk Seviyesi -> Kampanya Sonucu
+        # Dusuk/Orta risk -> "Kampanya Gerekmiyor" (kampanya hedeflenmiyor)
+        for rl in ["🟢 Düşük Risk", "🟡 Orta Risk"]:
+            cnt = len(_sk[_sk["RiskLevel"] == rl])
+            if cnt > 0:
+                sources.append(node_idx[rl])
+                targets.append(node_idx["➖ Kampanya Gerekmiyor"])
+                values.append(cnt)
+                link_colors.append("#6B729955")
+
+        # Yuksek risk -> Beklenen Kurtarilan / Beklenen Kayip (segment ortalama donusum oranina gore)
+        high_risk_df = _sk[_sk["RiskLevel"] == "🔴 Yüksek Risk"]
+        total_high = len(high_risk_df)
+        avg_conv = high_risk_df["SimulatedConversionRate"].mean() if total_high > 0 else 0
+        expected_retained = int(round(total_high * avg_conv))
+        expected_lost = total_high - expected_retained
+
+        if expected_retained > 0:
+            sources.append(node_idx["🔴 Yüksek Risk"])
+            targets.append(node_idx["✅ Beklenen Kurtarılan"])
+            values.append(expected_retained)
+            link_colors.append("#4ADE8055")
+        if expected_lost > 0:
+            sources.append(node_idx["🔴 Yüksek Risk"])
+            targets.append(node_idx["⚠️ Beklenen Kayıp"])
+            values.append(expected_lost)
+            link_colors.append("#FF5D8F55")
+
+        node_colors = (
+            [seg_color_map[s] for s in segments]
+            + ["#4ADE80", "#F59E0B", "#EF4444"]
+            + ["#4ADE80", "#FF5D8F", "#6B7299"]
+        )
+
+        return all_nodes, node_colors, sources, targets, values, link_colors
+
+    _sk_nodes, _sk_node_colors, _sk_src, _sk_tgt, _sk_val, _sk_link_colors = build_sankey_data(df)
+
+    sankey_fig = go.Figure(go.Sankey(
+        node=dict(
+            pad=18, thickness=18,
+            line=dict(color="rgba(255,255,255,.15)", width=0.5),
+            label=_sk_nodes, color=_sk_node_colors,
+        ),
+        link=dict(source=_sk_src, target=_sk_tgt, value=_sk_val, color=_sk_link_colors),
+    ))
+    sankey_fig.update_layout(
+        margin=dict(l=0, r=0, t=10, b=10), height=420,
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="#E4E7F5", size=12),
+    )
+    st.plotly_chart(sankey_fig, use_container_width=True, config={"displayModeBar": False})
 
     st.markdown(f"#### Müşteri Listesi — {selected_segment}")
     display_df = filtered.head(200).copy()
