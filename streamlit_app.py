@@ -982,11 +982,91 @@ elif active_tab == "🔔 Canlı Uyarılar":
             render_html(
                 f"""<div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
                 {SINYO_IMG_TAG.replace("width:52px", "width:34px")}
-                <div style="font-size:13px; color:#8B93C7;">Sinyo bu müşteri için SMS hazırlayabilir</div>
+                <div style="font-size:13px; color:#8B93C7;">Sinyo bu müşteriye nasıl ulaşmak istersin?</div>
                 </div>"""
             )
-            if st.button("✉️ Kişiselleştirilmiş SMS Oluştur", key=f"sms_btn_{cust['customerID']}", type="primary"):
-                api_key = st.session_state.get("api_key", "")
+
+            if "generated_whatsapp" not in st.session_state:
+                st.session_state["generated_whatsapp"] = {}
+            if "generated_email" not in st.session_state:
+                st.session_state["generated_email"] = {}
+            if "call_queue" not in st.session_state:
+                st.session_state["call_queue"] = set()
+
+            def _sinyo_channel_prompt(channel):
+                base_info = f"""Musteri verisi:
+    - Segment: {cust['ChurnReasonSegment']}
+    - Onerilen kampanya: {cust['RecommendedCampaign']}
+    - Musterilik suresi: {cust['tenure']} ay
+    - Aylik odeme: {cust['MonthlyCharges']:.0f} TL
+    - Sozlesme tipi: {cust['Contract']}"""
+
+                persona = """Senin adin Sinyo. Bir telekom sirketi icin calisan, musterilere ozel
+    kampanyalar ureten akilli bir robotsun. Kisiligin: Sicak, enerjik, cozum odakli,
+    samimi ama saygili. Robot kimligini gizleme, bunu sevimli bir ozellik gibi kullan."""
+
+                common_rules = """Kurallar:
+    - SADECE nihai, temiz metni yaz. Taslak, aciklama, dipnot, kendi kendini
+      duzeltme YOK.
+    - Onerilen kampanyayi SOMUT bir rakamla anlat.
+    - Musterilik suresini dogru say (yil degil, ay - eger 12'den kucukse).
+    - Eylem cagrisi ile bitir, KESINLIKLE soru cumlesi kurma (soru isareti yok),
+      emir kipiyle net bir yonlendirme yap."""
+
+                if channel == "whatsapp":
+                    return f"""{persona}
+
+    {base_info}
+
+    Musteriye WhatsApp'tan gonderilecek bir mesaj yaz. WhatsApp SMS'ten daha
+    rahat/samimi olabilir, 1-2 emoji kullanabilirsin (abartmadan), 2-4 cumle
+    olabilir (SMS'ten biraz daha uzun olabilir).
+
+    {common_rules}
+
+    Cikti SADECE mesaj metni olsun, baska hicbir sey yazma (JSON degil, duz metin)."""
+
+                elif channel == "email":
+                    return f"""{persona}
+
+    {base_info}
+
+    Musteriye e-posta gonderilecek. Once konu satirini, sonra bos satir, sonra
+    e-posta govdesini yaz. E-posta SMS'ten daha resmi/detayli olabilir (4-6 cumle),
+    ama hala Sinyo'nun sicak tonunu koru.
+
+    {common_rules}
+
+    Cikti TAM OLARAK su formatta olsun:
+    KONU: [konu satiri]
+
+    [e-posta govdesi]
+
+    Baska hicbir aciklama ekleme."""
+
+                return None  # sms zaten ayri yonetiliyor
+
+            ch_col1, ch_col2, ch_col3, ch_col4 = st.columns(4)
+
+            with ch_col1:
+                sms_clicked = st.button("💬 SMS", key=f"sms_btn_{cust['customerID']}", use_container_width=True, type="primary")
+            with ch_col2:
+                wa_clicked = st.button("🟢 WhatsApp", key=f"wa_btn_{cust['customerID']}", use_container_width=True, type="primary")
+            with ch_col3:
+                email_clicked = st.button("📧 E-posta", key=f"email_btn_{cust['customerID']}", use_container_width=True, type="primary")
+            with ch_col4:
+                call_clicked = st.button("📞 Arama Planla", key=f"call_btn_{cust['customerID']}", use_container_width=True, type="primary")
+
+            api_key = st.session_state.get("api_key", "")
+
+            if call_clicked:
+                st.session_state["call_queue"].add(cust["customerID"])
+                st.success(
+                    f"📞 Sinyo, {cust['customerID']} numaralı müşteriyi arama listesine ekledi. "
+                    "(Gerçek entegrasyonda bu, çağrı merkezi kuyruğuna otomatik düşer.)"
+                )
+
+            if sms_clicked:
                 if not api_key:
                     st.error("Önce sol taraftaki panelden Anthropic API key'ini gir.")
                 elif not ANTHROPIC_AVAILABLE:
@@ -1050,11 +1130,59 @@ elif active_tab == "🔔 Canlı Uyarılar":
                         except Exception as e:
                             st.error(f"SMS oluşturulurken hata oluştu: {type(e).__name__}: {e}")
 
+            if wa_clicked:
+                if not api_key:
+                    st.error("Önce sol taraftaki panelden Anthropic API key'ini gir.")
+                elif not ANTHROPIC_AVAILABLE:
+                    st.error("`anthropic` kütüphanesi kurulu değil.")
+                else:
+                    with st.spinner("Sinyo WhatsApp mesajı hazırlıyor..."):
+                        try:
+                            client = anthropic.Anthropic(api_key=api_key)
+                            response = client.messages.create(
+                                model="claude-sonnet-5", max_tokens=400,
+                                messages=[{"role": "user", "content": _sinyo_channel_prompt("whatsapp")}],
+                            )
+                            wa_text = "".join(b.text for b in response.content if b.type == "text").strip()
+                            st.session_state["generated_whatsapp"][cust["customerID"]] = wa_text
+                        except Exception as e:
+                            st.error(f"WhatsApp mesajı oluşturulurken hata: {type(e).__name__}: {e}")
+
+            if email_clicked:
+                if not api_key:
+                    st.error("Önce sol taraftaki panelden Anthropic API key'ini gir.")
+                elif not ANTHROPIC_AVAILABLE:
+                    st.error("`anthropic` kütüphanesi kurulu değil.")
+                else:
+                    with st.spinner("Sinyo e-posta hazırlıyor..."):
+                        try:
+                            client = anthropic.Anthropic(api_key=api_key)
+                            response = client.messages.create(
+                                model="claude-sonnet-5", max_tokens=500,
+                                messages=[{"role": "user", "content": _sinyo_channel_prompt("email")}],
+                            )
+                            email_text = "".join(b.text for b in response.content if b.type == "text").strip()
+                            st.session_state["generated_email"][cust["customerID"]] = email_text
+                        except Exception as e:
+                            st.error(f"E-posta oluşturulurken hata: {type(e).__name__}: {e}")
+
             if cust["customerID"] in st.session_state["generated_sms"]:
                 st.text_area(
-                    "Oluşturulan SMS", value=st.session_state["generated_sms"][cust["customerID"]],
-                    height=140, key=f"sms_text_{cust['customerID']}",
+                    "💬 Oluşturulan SMS", value=st.session_state["generated_sms"][cust["customerID"]],
+                    height=120, key=f"sms_text_{cust['customerID']}",
                 )
+            if cust["customerID"] in st.session_state["generated_whatsapp"]:
+                st.text_area(
+                    "🟢 Oluşturulan WhatsApp Mesajı", value=st.session_state["generated_whatsapp"][cust["customerID"]],
+                    height=140, key=f"wa_text_{cust['customerID']}",
+                )
+            if cust["customerID"] in st.session_state["generated_email"]:
+                st.text_area(
+                    "📧 Oluşturulan E-posta", value=st.session_state["generated_email"][cust["customerID"]],
+                    height=180, key=f"email_text_{cust['customerID']}",
+                )
+            if cust["customerID"] in st.session_state["call_queue"]:
+                st.caption("📞 Bu müşteri arama listesinde.")
 
 elif active_tab == "📋 Müşteri Listesi":
     seg_summary = (
