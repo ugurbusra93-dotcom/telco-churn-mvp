@@ -554,7 +554,7 @@ ALL_TABS = {
 
 ROLE_TAB_MAP = {
     "executive": ["🤖 AI Copilot", "💰 ROI Simülasyonu"],
-    "marketing": ["📋 Müşteri Listesi", "💰 ROI Simülasyonu", "🤖 AI Copilot"],
+    "marketing": ["📋 Müşteri Listesi", "🔔 Canlı Uyarılar", "💰 ROI Simülasyonu", "🤖 AI Copilot"],
     "retention": ["🔔 Canlı Uyarılar", "🤖 AI Copilot"],
 }
 
@@ -942,13 +942,35 @@ elif active_tab == "📋 Müşteri Listesi":
         .agg(musteri_sayisi=("customerID", "count"), ortalama_risk=("ChurnRiskScore", "mean"))
         .reset_index().sort_values("musteri_sayisi", ascending=False)
     )
+
+    def _dark_bar_chart(x_col, y_col, color, title, y_is_pct=False):
+        fig = go.Figure(go.Bar(
+            x=seg_summary[x_col], y=seg_summary[y_col], marker=dict(color=color),
+            text=[f"%{v*100:.0f}" if y_is_pct else f"{v:,.0f}" for v in seg_summary[y_col]],
+            textposition="outside", textfont=dict(color="#E4E7F5", size=11),
+        ))
+        fig.update_layout(
+            margin=dict(l=0, r=0, t=10, b=60), height=260,
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+            xaxis=dict(tickfont=dict(color="#C7CCE8", size=11), tickangle=-30),
+            yaxis=dict(visible=False),
+            showlegend=False,
+        )
+        return fig
+
     g1, g2 = st.columns([1, 1])
     with g1:
-        st.caption("Segment Dağılımı")
-        st.bar_chart(seg_summary.set_index("ChurnReasonSegment")["musteri_sayisi"], color="#7B5CF5")
+        st.caption("Segment Dağılımı (müşteri sayısı)")
+        st.plotly_chart(
+            _dark_bar_chart("ChurnReasonSegment", "musteri_sayisi", "#7C5CFF", "Segment Dağılımı"),
+            use_container_width=True, config={"displayModeBar": False},
+        )
     with g2:
         st.caption("Segment Bazlı Ortalama Risk")
-        st.bar_chart(seg_summary.set_index("ChurnReasonSegment")["ortalama_risk"], color="#E8577A")
+        st.plotly_chart(
+            _dark_bar_chart("ChurnReasonSegment", "ortalama_risk", "#FF5D8F", "Ortalama Risk", y_is_pct=True),
+            use_container_width=True, config={"displayModeBar": False},
+        )
 
     st.markdown(f"#### Müşteri Listesi — {selected_segment}")
     display_df = filtered.head(200).copy()
