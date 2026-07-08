@@ -12,6 +12,7 @@ import numpy as np
 import os
 import random
 import datetime
+import time
 import plotly.graph_objects as go
 
 try:
@@ -409,6 +410,7 @@ def get_kpi_histograms(tenure_vals, risk_vals, clv_vals):
 
 
 import base64
+import requests
 
 
 def get_logo_base64():
@@ -642,6 +644,17 @@ def get_fake_name(customer_id):
     first = _FIRST_NAMES[h % len(_FIRST_NAMES)]
     last = _LAST_NAMES[(h // len(_FIRST_NAMES)) % len(_LAST_NAMES)]
     return f"{first} {last}"
+
+
+# ============ HeyGen: Sinyo'nun konustugu video uretimi ============
+# Tum HeyGen mantigi artik services/heygen_service.py icinde toplanmis durumda.
+from services.heygen_service import (
+    HeyGenError,
+    get_sinyo_look_id_cached,
+    generate_video_and_wait,
+)
+
+HEYGEN_VOICE_ID = os.environ.get("HEYGEN_VOICE_ID", "")
 
 
 def risk_badge_html(x):
@@ -1214,18 +1227,66 @@ elif active_tab == "🔔 Canlı Uyarılar":
                         st.session_state["sent_status"][sent_key] = True
                         st.rerun()
 
+            if "sinyo_videos" not in st.session_state:
+                st.session_state["sinyo_videos"] = {}
+            if "video_sent_status" not in st.session_state:
+                st.session_state["video_sent_status"] = {}
+
+            def _video_section(source_text, source_label, channel_key):
+                video_key = f"{cust['customerID']}_{channel_key}"
+                if st.button(
+                    f"🎥 Sinyo Videosu Oluştur ({source_label})",
+                    key=f"video_btn_{video_key}", use_container_width=True,
+                ):
+                    try:
+                        with st.spinner("Sinyo'nun avatarı bulunuyor..."):
+                            look_id = get_sinyo_look_id_cached(st.session_state)
+                        with st.spinner(
+                            "Sinyo videosu hazırlanıyor... Bu 30 saniye - 2 dakika sürebilir, "
+                            "lütfen sayfadan ayrılma."
+                        ):
+                            video_url = generate_video_and_wait(
+                                source_text, look_id, voice_id=HEYGEN_VOICE_ID or None
+                            )
+                            st.session_state["sinyo_videos"][video_key] = video_url
+                            st.session_state["video_sent_status"][video_key] = False
+                    except HeyGenError as e:
+                        st.error(f"🎥 Video oluşturulamadı: {e}")
+                    except Exception as e:
+                        st.error(f"Beklenmeyen bir hata oluştu: {type(e).__name__}: {e}")
+
+                video_ready = video_key in st.session_state["sinyo_videos"]
+
+                if video_ready:
+                    st.video(st.session_state["sinyo_videos"][video_key])
+                    already_sent = st.session_state["video_sent_status"].get(video_key, False)
+                    if already_sent:
+                        st.success("✅ Video gönderildi.")
+                    else:
+                        if st.button("📤 Videoyu Gönder", key=f"video_send_{video_key}", use_container_width=True):
+                            st.session_state["video_sent_status"][video_key] = True
+                            st.rerun()
+                else:
+                    st.button(
+                        "📤 Videoyu Gönder", key=f"video_send_disabled_{video_key}",
+                        use_container_width=True, disabled=True,
+                        help="Önce videoyu oluşturman gerekiyor.",
+                    )
+
             if cust["customerID"] in st.session_state["generated_sms"]:
                 st.text_area(
                     "💬 Oluşturulan SMS", value=st.session_state["generated_sms"][cust["customerID"]],
                     height=120, key=f"sms_text_{cust['customerID']}",
                 )
                 _send_button("sms", "SMS")
+                _video_section(st.session_state["generated_sms"][cust["customerID"]], "SMS", "sms")
             if cust["customerID"] in st.session_state["generated_whatsapp"]:
                 st.text_area(
                     "🟢 Oluşturulan WhatsApp Mesajı", value=st.session_state["generated_whatsapp"][cust["customerID"]],
                     height=140, key=f"wa_text_{cust['customerID']}",
                 )
                 _send_button("whatsapp", "WhatsApp Mesajı")
+                _video_section(st.session_state["generated_whatsapp"][cust["customerID"]], "WhatsApp", "whatsapp")
             if cust["customerID"] in st.session_state["generated_email"]:
                 st.text_area(
                     "📧 Oluşturulan E-posta", value=st.session_state["generated_email"][cust["customerID"]],
