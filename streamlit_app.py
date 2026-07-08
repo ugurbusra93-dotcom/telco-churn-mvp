@@ -619,6 +619,31 @@ if "generated_sms" not in st.session_state:
     st.session_state["generated_sms"] = {}
 
 
+import hashlib
+
+_FIRST_NAMES = [
+    "Ahmet", "Mehmet", "Ayşe", "Fatma", "Ali", "Zeynep", "Mustafa", "Elif",
+    "Hüseyin", "Emine", "İbrahim", "Hatice", "Hasan", "Meryem", "Yusuf",
+    "Özlem", "Murat", "Sevgi", "Kemal", "Derya", "Emre", "Gül", "Serkan",
+    "Aylin", "Burak", "Ceren", "Onur", "Deniz", "Cem", "Selin",
+]
+_LAST_NAMES = [
+    "Yılmaz", "Kaya", "Demir", "Şahin", "Çelik", "Yıldız", "Yıldırım",
+    "Öztürk", "Aydın", "Özdemir", "Arslan", "Doğan", "Kılıç", "Aslan",
+    "Çetin", "Kara", "Koç", "Kurt", "Özkan", "Şimşek", "Polat", "Korkmaz",
+]
+
+
+def get_fake_name(customer_id):
+    """Musteri ID'sinden deterministik (her zaman ayni) bir takma ad-soyad
+    uretir. Gercek isim degildir, sadece arayuzde kisisellestirme hissi
+    vermek icin - hash tabanli oldugu icin ayni musteri hep ayni ismi alir."""
+    h = int(hashlib.md5(customer_id.encode()).hexdigest(), 16)
+    first = _FIRST_NAMES[h % len(_FIRST_NAMES)]
+    last = _LAST_NAMES[(h // len(_FIRST_NAMES)) % len(_LAST_NAMES)]
+    return f"{first} {last}"
+
+
 def risk_badge_html(x):
     if x > 0.6:
         return f'<span class="risk-badge risk-high">🔴 {x*100:.0f}%</span>'
@@ -960,6 +985,7 @@ elif active_tab == "🔔 Canlı Uyarılar":
         with card_col1:
             render_html(
                 f"""<div class="crd-card"><h4>👤 Müşteri Profili</h4>
+                <div class="crd-field"><b>Ad Soyad:</b> {get_fake_name(cust['customerID'])} <span style="color:#6C7399; font-size:12px;">(takma ad)</span></div>
                 <div class="crd-field"><b>ID:</b> {cust['customerID']}</div>
                 <div class="crd-field"><b>Risk:</b> {risk_badge_html(cust['ChurnRiskScore'])}</div>
                 <div class="crd-field"><b>Segment:</b> {cust['ChurnReasonSegment']}</div>
@@ -994,7 +1020,9 @@ elif active_tab == "🔔 Canlı Uyarılar":
                 st.session_state["call_queue"] = set()
 
             def _sinyo_channel_prompt(channel):
+                _cust_name = get_fake_name(cust["customerID"])
                 base_info = f"""Musteri verisi:
+    - Musteri adi: {_cust_name}
     - Segment: {cust['ChurnReasonSegment']}
     - Onerilen kampanya: {cust['RecommendedCampaign']}
     - Musterilik suresi: {cust['tenure']} ay
@@ -1005,9 +1033,11 @@ elif active_tab == "🔔 Canlı Uyarılar":
     kampanyalar ureten akilli bir robotsun. Kisiligin: Sicak, enerjik, cozum odakli,
     samimi ama saygili. Robot kimligini gizleme, bunu sevimli bir ozellik gibi kullan."""
 
-                common_rules = """Kurallar:
+                common_rules = f"""Kurallar:
     - SADECE nihai, temiz metni yaz. Taslak, aciklama, dipnot, kendi kendini
       duzeltme YOK.
+    - Musteriye ismiyle hitap et: "{_cust_name}" (soyadi degil sadece adini
+      kullanabilirsin, samimi bir hitap olsun).
     - Onerilen kampanyayi SOMUT bir rakamla anlat.
     - Musterilik suresini dogru say (yil degil, ay - eger 12'den kucukse).
     - Eylem cagrisi ile bitir, KESINLIKLE soru cumlesi kurma (soru isareti yok),
@@ -1086,6 +1116,7 @@ elif active_tab == "🔔 Canlı Uyarılar":
     hedefleyen, SMS ile gonderilecek TEK bir mesaj yaz.
 
     Musteri verisi:
+    - Musteri adi: {get_fake_name(cust['customerID'])}
     - Segment: {cust['ChurnReasonSegment']}
     - Onerilen kampanya: {cust['RecommendedCampaign']}
     - Musterilik suresi: {cust['tenure']} ay
@@ -1096,17 +1127,18 @@ elif active_tab == "🔔 Canlı Uyarılar":
     1. SADECE nihai, temiz SMS metnini yaz. Ilk taslak, aciklama, alternatif,
        dipnot, yildizli not (*), kendi kendini duzeltme YOK. Tek seferde dogru
        ve son halini yaz.
-    2. Mesaj Sinyo'nun agzindan gitmeli - "Ben Sinyo," ile ya da dogrudan
+    2. Musteriye ismiyle (sadece adi, soyadi degil) hitap et - samimi bir baslangic yap.
+    3. Mesaj Sinyo'nun agzindan gitmeli - "Ben Sinyo," ile ya da dogrudan
        "Senin icin [kampanya] hazirladim/buldum" gibi ilk tekil sahisla baslayabilirsin.
        Robot kimligini gizleme, bunu bir ozellik gibi kullan (sicak ve akilli bir
        asistan hissi).
-    3. Turkce yaz, abartili unlemden kacin ama enerjik ve kisisel bir dil kullan.
-    4. En fazla 2-3 cumle, toplamda 200 karakteri gecme.
-    5. Onerilen kampanyayi SOMUT bir rakamla anlat (yuzde indirim, ay sayisi gibi -
+    4. Turkce yaz, abartili unlemden kacin ama enerjik ve kisisel bir dil kullan.
+    5. En fazla 2-3 cumle, toplamda 200 karakteri gecme.
+    6. Onerilen kampanyayi SOMUT bir rakamla anlat (yuzde indirim, ay sayisi gibi -
        {cust['RecommendedCampaign']} icindeki bilgiyi kullan).
-    6. Musterilik suresini dogru say: {cust['tenure']} ay (yil degil, ay olarak
+    7. Musterilik suresini dogru say: {cust['tenure']} ay (yil degil, ay olarak
        ifade et eger 12'den kucukse).
-    7. Bir eylem cagrisi (CTA) ile bitir, ama KESINLIKLE soru cumlesi kurma
+    8. Bir eylem cagrisi (CTA) ile bitir, ama KESINLIKLE soru cumlesi kurma
        (soru isareti "?" kullanma). Emir kipiyle, net ve aciliyet hissi veren bir
        yonlendirme yap: "Hemen aktif et.", "Vakit kaybetmeden uygulamayi ac.",
        "Bu firsati kacirma, hemen basvur." gibi.
@@ -1166,21 +1198,40 @@ elif active_tab == "🔔 Canlı Uyarılar":
                         except Exception as e:
                             st.error(f"E-posta oluşturulurken hata: {type(e).__name__}: {e}")
 
+            if "sent_status" not in st.session_state:
+                st.session_state["sent_status"] = {}
+
+            def _send_button(channel_key, channel_label):
+                sent_key = f"{cust['customerID']}_{channel_key}"
+                already_sent = st.session_state["sent_status"].get(sent_key, False)
+                if already_sent:
+                    st.success(f"✅ {channel_label} gönderildi.")
+                else:
+                    if st.button(
+                        f"📤 {channel_label} Gönder", key=f"send_{channel_key}_{cust['customerID']}",
+                        use_container_width=True,
+                    ):
+                        st.session_state["sent_status"][sent_key] = True
+                        st.rerun()
+
             if cust["customerID"] in st.session_state["generated_sms"]:
                 st.text_area(
                     "💬 Oluşturulan SMS", value=st.session_state["generated_sms"][cust["customerID"]],
                     height=120, key=f"sms_text_{cust['customerID']}",
                 )
+                _send_button("sms", "SMS")
             if cust["customerID"] in st.session_state["generated_whatsapp"]:
                 st.text_area(
                     "🟢 Oluşturulan WhatsApp Mesajı", value=st.session_state["generated_whatsapp"][cust["customerID"]],
                     height=140, key=f"wa_text_{cust['customerID']}",
                 )
+                _send_button("whatsapp", "WhatsApp Mesajı")
             if cust["customerID"] in st.session_state["generated_email"]:
                 st.text_area(
                     "📧 Oluşturulan E-posta", value=st.session_state["generated_email"][cust["customerID"]],
                     height=180, key=f"email_text_{cust['customerID']}",
                 )
+                _send_button("email", "E-posta")
             if cust["customerID"] in st.session_state["call_queue"]:
                 st.caption("📞 Bu müşteri arama listesinde.")
 
