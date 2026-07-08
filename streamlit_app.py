@@ -224,8 +224,11 @@ st.markdown(
     }
     section[data-testid="stSidebar"] label { color: #8B93C7 !important; font-size:13px; }
     section[data-testid="stSidebar"] [data-baseweb="select"] > div {
-        background: rgba(17,24,45,.8); border-color: rgba(255,255,255,.1); border-radius:10px;
+        background: rgba(17,24,45,.9) !important; border: 1px solid rgba(255,255,255,.15) !important;
+        border-radius:10px !important;
     }
+    section[data-testid="stSidebar"] [data-baseweb="select"] span { color: #F5F6FD !important; }
+    section[data-testid="stSidebar"] svg { fill: #A8AEC7 !important; }
     section[data-testid="stSidebar"] hr { border-color: rgba(255,255,255,.08); }
 
     /* Tablo */
