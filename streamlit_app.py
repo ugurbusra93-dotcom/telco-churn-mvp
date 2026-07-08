@@ -1063,4 +1063,3 @@ elif active_tab == "💰 ROI Simülasyonu":
         "* Bu simülasyon varsayımsal maliyet ve dönüşüm oranlarına dayanır. Gerçek kampanya "
         "sonuçları geldiğinde bu değerler güncellenmeli."
     )
-cc
