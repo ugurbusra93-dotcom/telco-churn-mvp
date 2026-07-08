@@ -45,6 +45,13 @@ st.markdown(
             radial-gradient(circle at 85% 15%, rgba(34,211,238,.08) 0%, transparent 40%);
     }
     [data-testid="stAppViewContainer"] { color: #E4E7F5; }
+    .block-container { padding-top: 1.2rem !important; }
+    header[data-testid="stHeader"] {
+        background: #070B1F !important;
+        background-color: #070B1F !important;
+    }
+    [data-testid="stToolbar"] { background: transparent !important; }
+    [data-testid="stDecoration"] { display: none !important; }
     h1, h2, h3, h4, h5, p, span, label, div { color: #E4E7F5; }
     [data-testid="stMarkdownContainer"] p { color: #A8AEC7; }
 
@@ -224,22 +231,35 @@ st.markdown(
         background: rgba(124,92,255,.1); border: 1px solid rgba(124,92,255,.25); border-radius:12px;
     }
     section[data-testid="stSidebar"] label { color: #8B93C7 !important; font-size:13px; }
-    section[data-testid="stSidebar"] [data-baseweb="select"] > div {
-        background: rgba(17,24,45,.9) !important; border: 1px solid rgba(255,255,255,.15) !important;
-        border-radius:10px !important;
-    }
-    section[data-testid="stSidebar"] [data-baseweb="select"] span { color: #F5F6FD !important; }
-    section[data-testid="stSidebar"] svg { fill: #A8AEC7 !important; }
-    /* Daha agresif kapsama - Streamlit surumune gore ic yapı degisebiliyor */
-    section[data-testid="stSidebar"] div[data-baseweb="select"],
+    section[data-testid="stSidebar"] svg { fill: #C7CCE8 !important; }
+    /* Dropdown'lari SIYAH arkaplan + acik yaziyla garantiye aliyoruz -
+       Streamlit'in kendi tema ayari (.streamlit/config.toml) da bunu
+       destekliyor, bu CSS ek guvence icin */
+    section[data-testid="stSidebar"] [data-baseweb="select"],
+    section[data-testid="stSidebar"] [data-baseweb="select"] > div,
     section[data-testid="stSidebar"] div[data-baseweb="select"] div {
-        background-color: rgba(17,24,45,.95) !important;
+        background-color: #000000 !important;
+        border: 1px solid rgba(255,255,255,.2) !important;
+        border-radius: 10px !important;
+    }
+    section[data-testid="stSidebar"] div[data-baseweb="select"] * {
         color: #F5F6FD !important;
+        font-weight: 600 !important;
     }
     section[data-testid="stSidebar"] div[data-baseweb="select"] input {
         color: #F5F6FD !important;
     }
     section[data-testid="stSidebar"] hr { border-color: rgba(255,255,255,.08); }
+
+    /* Sidebar ust kismindaki Sinyo avatari */
+    .sidebar-sinyo-wrap {
+        display:flex; justify-content:center; padding: 10px 0 22px 0;
+    }
+    .sidebar-sinyo-wrap img {
+        width: 170px; height: auto; border-radius: 20px;
+        box-shadow: 0 0 32px rgba(124,92,255,.35);
+        border: 1px solid rgba(255,255,255,.1);
+    }
 
     /* Tablo */
     [data-testid="stDataFrame"] { border-radius:16px; overflow:hidden; }
@@ -414,15 +434,16 @@ import requests
 
 
 def get_logo_base64():
-    logo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logo.jpeg")
-    if os.path.exists(logo_path):
-        with open(logo_path, "rb") as f:
-            return base64.b64encode(f.read()).decode("utf-8")
-    return None
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    png_path = os.path.join(base_dir, "brand_logo.png")
+    if os.path.exists(png_path):
+        with open(png_path, "rb") as f:
+            return base64.b64encode(f.read()).decode("utf-8"), "png"
+    return None, None
 
 
 def get_sinyo_base64():
-    sinyo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sinyo.jpeg")
+    sinyo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sinyo_avatar.jpeg")
     if os.path.exists(sinyo_path):
         with open(sinyo_path, "rb") as f:
             return base64.b64encode(f.read()).decode("utf-8")
@@ -436,15 +457,17 @@ SINYO_IMG_TAG = (
 )
 
 
-_logo_b64 = get_logo_base64()
+_logo_b64, _logo_fmt = get_logo_base64()
 if _logo_b64:
     render_html(
         f"""
         <div class="crd-header" style="text-align:center;">
-            <img src="data:image/jpeg;base64,{_logo_b64}"
-                 style="width:110px; height:110px; border-radius:20px; margin-bottom:14px;
-                        box-shadow:0 0 30px rgba(124,92,255,.25);" />
-            <div class="crd-tagline" style="font-size:15px;">Predict. Personalize. Retain.</div>
+            <div style="display:inline-block; background:#FFFFFF; border-radius:18px;
+                        padding:14px 22px 10px 22px; box-shadow:0 4px 20px rgba(0,0,0,.25);">
+                <img src="data:image/{_logo_fmt};base64,{_logo_b64}"
+                     style="width:120px; height:auto; display:block;" />
+            </div>
+            <div class="crd-tagline" style="font-size:15px; margin-top:14px;">Predict. Personalize. Retain.</div>
         </div>
         """
     )
@@ -504,6 +527,13 @@ if not ANTHROPIC_AVAILABLE:
     st.sidebar.warning("`pip install anthropic` çalıştırman gerekiyor.")
 
 st.sidebar.markdown("---")
+
+if SINYO_B64:
+    st.sidebar.markdown(
+        f'<div class="sidebar-sinyo-wrap"><img src="data:image/jpeg;base64,{SINYO_B64}" /></div>',
+        unsafe_allow_html=True,
+    )
+
 st.sidebar.header("Filtreler")
 st.sidebar.caption("Bu filtreler sadece 📋 Müşteri Listesi sekmesindeki tabloyu etkiler.")
 
