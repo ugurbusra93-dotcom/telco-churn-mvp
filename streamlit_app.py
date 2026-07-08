@@ -419,6 +419,21 @@ def get_logo_base64():
     return None
 
 
+def get_sinyo_base64():
+    sinyo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sinyo.jpeg")
+    if os.path.exists(sinyo_path):
+        with open(sinyo_path, "rb") as f:
+            return base64.b64encode(f.read()).decode("utf-8")
+    return None
+
+
+SINYO_B64 = get_sinyo_base64()
+SINYO_IMG_TAG = (
+    f'<img src="data:image/jpeg;base64,{SINYO_B64}" style="width:52px; height:auto; '
+    f'border-radius:12px; flex-shrink:0;" />' if SINYO_B64 else "🤖"
+)
+
+
 _logo_b64 = get_logo_base64()
 if _logo_b64:
     render_html(
@@ -709,7 +724,10 @@ Kurallar:
 
     _exec_html = (
         '<div class="crd-ai-card">'
-        '<div class="crd-ai-eyebrow">🤖 AI Executive Summary</div>'
+        '<div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">'
+        + SINYO_IMG_TAG.replace("width:52px", "width:38px") +
+        '<div class="crd-ai-eyebrow" style="margin:0;">Sinyo\'nun Kampanya Önerisi</div>'
+        '</div>'
         '<div style="font-size:19px; line-height:1.7; color:#F5F6FD; font-weight:500; margin-bottom:20px; white-space:pre-wrap;">'
         + st.session_state['exec_summary_html'] +
         '</div>'
@@ -771,6 +789,15 @@ st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 active_tab = st.session_state["active_tab"]
 
 if active_tab == "🤖 AI Copilot":
+    render_html(
+        f"""<div style="display:flex; align-items:center; gap:14px; margin-bottom:6px;">
+        {SINYO_IMG_TAG}
+        <div>
+            <div style="font-size:17px; font-weight:700; color:#F5F6FD;">Sinyo ile konuş</div>
+            <div style="font-size:13px; color:#8B93C7;">Akıllı asistanın — veri hakkında ne merak ediyorsan sor.</div>
+        </div>
+        </div>"""
+    )
     st.caption(
         "Veri hakkında doğal dilde soru sor — cevaplar gerçek veriden (en riskli müşteriler, "
         "segment istatistikleri) türetilir, uydurma değildir."
@@ -828,7 +855,11 @@ if active_tab == "🤖 AI Copilot":
                         .to_string(index=False)
                     )
 
-                    context = f"""Asagida gercek veriden turetilmis ozet tablolar var. SADECE bu
+                    context = f"""Senin adin Sinyo. Bu telekom sirketinin churn (musteri kaybi)
+    onleme sisteminde calisan, akilli, cozum uretebilen, sicak ama profesyonel bir yapay
+    zeka asistanisin. Sirket calisanlarina (pazarlama/retention ekibi) yardim ediyorsun.
+
+    Asagida gercek veriden turetilmis ozet tablolar var. SADECE bu
     verilere dayanarak cevap ver, bu verilerin disinda sayi/istatistik uydurma.
 
     --- SEGMENT ISTATISTIKLERI ---
@@ -851,12 +882,15 @@ if active_tab == "🤖 AI Copilot":
     Kullanicinin sorusu: {user_question}
 
     Kurallar:
+    - Sinyo olarak, birinci tekil sahisla, samimi ama profesyonel bir tonda cevap ver.
     - Turkce cevap ver, kisa ve net ol (max 5-6 cumle veya kisa madde listesi).
     - Cevabini SADECE yukaridaki tablolardan cikar, tahmin/uydurma yapma.
     - Eger soru "hangi segmente/kampanyaya oncelik verelim" turundeyse, MUTLAKA yukaridaki
       "RESMI SISTEM ONERISI" bolumundeki segmenti belirt (baska panellerle celismesin).
     - Somut musteri ID'leri, segment isimleri, sayilar kullan.
-    - Eger soru tablolarda cevaplanamayacak bir sey soruyorsa, bunu acikca belirt."""
+    - Eger soru tablolarda cevaplanamayacak bir sey soruyorsa, bunu acikca belirt.
+    - Cevabinin basinda "Ben Sinyo," gibi bir tekrar yapma, dogrudan cevaba gec (persona
+      zaten ton ve uslupla hissettirilsin)."""
 
                     client = anthropic.Anthropic(api_key=api_key)
                     response = client.messages.create(
@@ -870,7 +904,13 @@ if active_tab == "🤖 AI Copilot":
                     st.error(f"Cevap üretilirken hata oluştu: {e}")
 
     if st.session_state.get("copilot_answer"):
-        _copilot_html = '<div class="crd-ai-card"><div class="crd-ai-eyebrow">🤖 AI Copilot Yanıtı</div><div style="color:#E4E7F5; font-size:15px; line-height:1.7; white-space:pre-wrap;">' + st.session_state['copilot_answer'] + '</div></div>'
+        _copilot_html = (
+            '<div class="crd-ai-card"><div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">'
+            + SINYO_IMG_TAG.replace("width:52px", "width:36px")
+            + '<div class="crd-ai-eyebrow" style="margin:0;">Sinyo diyor ki</div></div>'
+            + '<div style="color:#E4E7F5; font-size:15px; line-height:1.7; white-space:pre-wrap;">'
+            + st.session_state['copilot_answer'] + '</div></div>'
+        )
         st.markdown(_copilot_html, unsafe_allow_html=True)
 
 elif active_tab == "🔔 Canlı Uyarılar":
@@ -939,6 +979,12 @@ elif active_tab == "🔔 Canlı Uyarılar":
                 </div>"""
             )
             st.markdown("<br>", unsafe_allow_html=True)
+            render_html(
+                f"""<div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+                {SINYO_IMG_TAG.replace("width:52px", "width:34px")}
+                <div style="font-size:13px; color:#8B93C7;">Sinyo bu müşteri için SMS hazırlayabilir</div>
+                </div>"""
+            )
             if st.button("✉️ Kişiselleştirilmiş SMS Oluştur", key=f"sms_btn_{cust['customerID']}", type="primary"):
                 api_key = st.session_state.get("api_key", "")
                 if not api_key:
