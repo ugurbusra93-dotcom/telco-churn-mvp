@@ -107,25 +107,23 @@ def get_sinyo_look_id_cached(session_state, avatar_name="Sinyo"):
     return session_state[cache_key]
 
 
-def create_video(text, look_id, voice_id=None, width=720, height=720):
-    """POST /v3/videos ile video olusturma istegi baslatir, video_id dondurur
-    (video henuz hazir degildir, ayrica polling ile beklenmesi gerekir)."""
+def create_video(text, avatar_id, voice_id=None, resolution="720p", aspect_ratio="16:9"):
+    """POST /v3/videos ile video olusturma istegi baslatir, video_id dondurur.
+    Resmi HeyGen OpenAPI semasina (CreateVideoFromAvatar) gore yazilmistir:
+    payload DUZ (flat) alanlardan olusuyor, 'video_inputs' sarmalayicisi YOK,
+    'voice' objesi YOK - script ve voice_id dogrudan ust seviyede."""
     api_key = _get_api_key()
-    headers = {"X-Api-Key": api_key, "Content-Type": "application/json"}
-
-    voice_config = {"type": "text", "input_text": text}
-    if voice_id:
-        voice_config["voice_id"] = voice_id
+    headers = {"x-api-key": api_key, "Content-Type": "application/json"}
 
     payload = {
-        "video_inputs": [
-            {
-                "character": {"type": "avatar", "look_id": look_id},
-                "voice": voice_config,
-            }
-        ],
-        "dimension": {"width": width, "height": height},
+        "type": "avatar",
+        "avatar_id": avatar_id,
+        "script": text,
+        "resolution": resolution,
+        "aspect_ratio": aspect_ratio,
     }
+    if voice_id:
+        payload["voice_id"] = voice_id
 
     try:
         resp = requests.post(f"{HEYGEN_API_BASE}/v3/videos", headers=headers, json=payload, timeout=30)
@@ -151,7 +149,7 @@ def check_video_status(video_id):
     """GET /v3/videos/{video_id} ile video durumunu kontrol eder.
     Dondurur: (status, video_url_veya_None, hata_mesaji_veya_None)"""
     api_key = _get_api_key()
-    headers = {"X-Api-Key": api_key}
+    headers = {"x-api-key": api_key}
 
     try:
         resp = requests.get(f"{HEYGEN_API_BASE}/v3/videos/{video_id}", headers=headers, timeout=20)
@@ -168,9 +166,9 @@ def check_video_status(video_id):
     return status, video_url, error_msg
 
 
-def generate_video_and_wait(text, look_id, voice_id=None, max_wait_seconds=120, poll_interval=5):
+def generate_video_and_wait(text, avatar_id, voice_id=None, max_wait_seconds=120, poll_interval=5):
     """Video olusturur ve tamamlanana kadar bekler (polling). Video URL dondurur."""
-    video_id = create_video(text, look_id, voice_id=voice_id)
+    video_id = create_video(text, avatar_id, voice_id=voice_id)
 
     waited = 0
     while waited < max_wait_seconds:
