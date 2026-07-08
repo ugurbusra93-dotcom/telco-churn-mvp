@@ -341,6 +341,35 @@ def compute_best_recommendation(df):
 
 BEST_RECOMMENDATION = compute_best_recommendation(df)
 
+
+@st.cache_data
+def get_segment_stats(df):
+    """Tum uygulamada tekrar tekrar hesaplanan segment ozet tablosunu TEK YERDE,
+    onbellekli olarak uretir. Musteri Listesi ve Executive Summary bolumleri
+    bunu paylasir - hem performans hem tutarlilik icin."""
+    return (
+        df.groupby("ChurnReasonSegment")
+        .agg(
+            n=("customerID", "count"),
+            avg_risk=("ChurnRiskScore", "mean"),
+            clv_at_risk=("EstimatedCLV", "sum"),
+            conv=("SimulatedConversionRate", "mean"),
+            cost=("CampaignCostPerCustomer", "mean"),
+        )
+        .rename(columns={"n": "musteri_sayisi", "avg_risk": "ortalama_risk"})
+        .sort_values("clv_at_risk", ascending=False)
+    )
+
+
+@st.cache_data
+def get_kpi_histograms(tenure_vals, risk_vals, clv_vals):
+    """Sparkline'lar icin histogram bin sayimlarini onbellekler."""
+    tenure_hist, _ = np.histogram(tenure_vals, bins=16)
+    risk_hist, _ = (np.histogram(risk_vals, bins=16) if len(risk_vals) > 1 else (np.array([0, 0]), None))
+    clv_hist, _ = (np.histogram(clv_vals, bins=16) if len(clv_vals) > 1 else (np.array([0, 0]), None))
+    return tenure_hist, risk_hist, clv_hist
+
+
 import base64
 
 
@@ -474,11 +503,11 @@ segment_avg_at_risk_clv = (
 )
 _risk_badge_text = f"%{segment_at_risk_pct:.1f} of {'segment' if selected_segment != 'Tümü' else 'total'}"
 
-# Sparkline verileri - gercek dagilimlardan turetilmis (histogram bin sayimlari)
-tenure_hist, _ = np.histogram(df["tenure"], bins=16)
-risk_hist, _ = np.histogram(_segment_scope["ChurnRiskScore"], bins=16) if len(_segment_scope) > 1 else (np.array([0, 0]), None)
+# Sparkline verileri - gercek dagilimlardan turetilmis, onbellekli hesaplanir
 _segment_at_risk_pool = _segment_scope[_segment_scope["ChurnRiskScore"] > 0.5]
-atrisk_clv_hist, _ = np.histogram(_segment_at_risk_pool["EstimatedCLV"], bins=16) if len(_segment_at_risk_pool) > 1 else (np.array([0, 0]), None)
+tenure_hist, risk_hist, atrisk_clv_hist = get_kpi_histograms(
+    df["tenure"], _segment_scope["ChurnRiskScore"], _segment_at_risk_pool["EstimatedCLV"]
+)
 filtered_risk_hist, _ = np.histogram(filtered["ChurnRiskScore"], bins=16) if len(filtered) > 1 else (np.array([0, 0]), None)
 
 render_html(
@@ -564,17 +593,7 @@ st.caption(f"📍 Şu an **{role_names[user_role]}** görünümündesin — bu r
 
 # ---------- AI Executive Briefing (sadece Yonetici rolunde) ----------
 if user_role == "executive":
-    seg_summary_exec = (
-        df.groupby("ChurnReasonSegment")
-        .agg(
-            n=("customerID", "count"),
-            avg_risk=("ChurnRiskScore", "mean"),
-            clv_at_risk=("EstimatedCLV", "sum"),
-            conv=("SimulatedConversionRate", "mean"),
-            cost=("CampaignCostPerCustomer", "mean"),
-        )
-        .sort_values("clv_at_risk", ascending=False)
-    )
+    seg_summary_exec = get_segment_stats(df)
 
     # Tum uygulamada TUTARLI tek bir oneri kaynagi (net dolar etkisine gore secilir)
     rec = BEST_RECOMMENDATION
@@ -938,8 +957,7 @@ elif active_tab == "🔔 Canlı Uyarılar":
 
 elif active_tab == "📋 Müşteri Listesi":
     seg_summary = (
-        df.groupby("ChurnReasonSegment")
-        .agg(musteri_sayisi=("customerID", "count"), ortalama_risk=("ChurnRiskScore", "mean"))
+        get_segment_stats(df)
         .reset_index().sort_values("musteri_sayisi", ascending=False)
     )
 
@@ -1045,3 +1063,4 @@ elif active_tab == "💰 ROI Simülasyonu":
         "* Bu simülasyon varsayımsal maliyet ve dönüşüm oranlarına dayanır. Gerçek kampanya "
         "sonuçları geldiğinde bu değerler güncellenmeli."
     )
+cc
