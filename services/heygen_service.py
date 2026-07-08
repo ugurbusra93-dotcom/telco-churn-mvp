@@ -60,18 +60,41 @@ def find_sinyo_look_id(avatar_name="Sinyo"):
         raise HeyGenError(f"Avatar listesi alinamadi ({resp.status_code}): {resp.text}")
 
     data = resp.json()
-    looks = data.get("data", {}).get("looks", []) or data.get("looks", []) or data.get("data", [])
+
+    # HeyGen'in cevap yapisi degisebiliyor - hem {"data": {"looks": [...]}} hem
+    # {"data": [...]} hem dogrudan [...] gibi farkli sekiller olabilir. Hepsini
+    # güvenli sekilde ele aliyoruz.
+    inner = data.get("data", data) if isinstance(data, dict) else data
+
+    if isinstance(inner, list):
+        looks = inner
+    elif isinstance(inner, dict):
+        looks = inner.get("looks", []) or inner.get("avatars", []) or []
+    else:
+        looks = []
+
+    if not looks:
+        raise HeyGenError(
+            f"Avatar listesi bos geldi ya da beklenmeyen bir formatta. "
+            f"Ham cevap (ilk 500 karakter): {str(data)[:500]}"
+        )
 
     for look in looks:
-        name = look.get("name") or look.get("look_name") or ""
+        if not isinstance(look, dict):
+            continue
+        name = look.get("name") or look.get("look_name") or look.get("avatar_name") or ""
         if avatar_name.lower() in str(name).lower():
-            look_id = look.get("look_id") or look.get("id")
+            look_id = look.get("look_id") or look.get("id") or look.get("avatar_id")
             if look_id:
                 return look_id
 
+    available_names = [
+        look.get("name") or look.get("look_name") or look.get("avatar_name") or "?"
+        for look in looks if isinstance(look, dict)
+    ]
     raise HeyGenError(
-        f"'{avatar_name}' isimli bir avatar bulunamadi. HeyGen hesabinda "
-        "Avatars bolumunden yuklendiginden ve isminin dogru oldugundan emin ol."
+        f"'{avatar_name}' isimli bir avatar bulunamadi. "
+        f"Hesaptaki mevcut avatar isimleri: {available_names}"
     )
 
 
