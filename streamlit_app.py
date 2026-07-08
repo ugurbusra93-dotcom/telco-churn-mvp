@@ -231,6 +231,27 @@ st.markdown(
     /* Tablo */
     [data-testid="stDataFrame"] { border-radius:16px; overflow:hidden; }
 
+    /* Ana icerikteki text_area, selectbox, input kutulari - koyu tema */
+    .stTextArea textarea {
+        background: rgba(17,24,45,.9) !important; color: #F5F6FD !important;
+        border: 1px solid rgba(255,255,255,.12) !important; border-radius:12px !important;
+    }
+    .stTextInput input {
+        background: rgba(17,24,45,.9) !important; color: #F5F6FD !important;
+        border: 1px solid rgba(255,255,255,.12) !important; border-radius:10px !important;
+    }
+    div[data-baseweb="select"] > div {
+        background: rgba(17,24,45,.9) !important; border: 1px solid rgba(255,255,255,.12) !important;
+        border-radius:10px !important;
+    }
+    div[data-baseweb="select"] span { color: #F5F6FD !important; }
+    div[data-baseweb="popover"] { background: #11182D !important; }
+    div[data-baseweb="popover"] li { color: #E4E7F5 !important; }
+    div[data-baseweb="popover"] li:hover { background: rgba(124,92,255,.15) !important; }
+    /* Slider */
+    div[data-testid="stSlider"] [role="slider"] { background-color: #7C5CFF !important; }
+    div[data-testid="stSlider"] div[data-baseweb="slider"] > div:nth-child(2) { background: #7C5CFF !important; }
+
     /* Expander / info / success / warning kutulari */
     [data-testid="stExpander"], .stAlert {
         background: rgba(17,24,45,.7) !important; border:1px solid rgba(255,255,255,.08) !important;
