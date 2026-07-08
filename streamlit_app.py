@@ -1296,6 +1296,11 @@ elif active_tab == "📋 Müşteri Listesi":
         all_nodes = segments + risk_levels + outcomes
         node_idx = {name: i for i, name in enumerate(all_nodes)}
 
+        def _hex_to_rgba(hex_color, alpha=0.35):
+            hex_color = hex_color.lstrip("#")
+            r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
+            return f"rgba({r},{g},{b},{alpha})"
+
         sources, targets, values, link_colors = [], [], [], []
         seg_colors = ["#7C5CFF", "#22D3EE", "#4ADE80", "#FF5D8F", "#F59E0B", "#A78BFA"]
         seg_color_map = {s: seg_colors[i % len(seg_colors)] for i, s in enumerate(segments)}
@@ -1308,7 +1313,7 @@ elif active_tab == "📋 Müşteri Listesi":
                     sources.append(node_idx[seg])
                     targets.append(node_idx[rl])
                     values.append(cnt)
-                    link_colors.append(seg_color_map[seg] + "55")
+                    link_colors.append(_hex_to_rgba(seg_color_map[seg]))
 
         # Asama 2: Risk Seviyesi -> Kampanya Sonucu
         # Dusuk/Orta risk -> "Kampanya Gerekmiyor" (kampanya hedeflenmiyor)
@@ -1318,7 +1323,7 @@ elif active_tab == "📋 Müşteri Listesi":
                 sources.append(node_idx[rl])
                 targets.append(node_idx["➖ Kampanya Gerekmiyor"])
                 values.append(cnt)
-                link_colors.append("#6B729955")
+                link_colors.append(_hex_to_rgba("#6B7299"))
 
         # Yuksek risk -> Beklenen Kurtarilan / Beklenen Kayip (segment ortalama donusum oranina gore)
         high_risk_df = _sk[_sk["RiskLevel"] == "🔴 Yüksek Risk"]
@@ -1331,12 +1336,12 @@ elif active_tab == "📋 Müşteri Listesi":
             sources.append(node_idx["🔴 Yüksek Risk"])
             targets.append(node_idx["✅ Beklenen Kurtarılan"])
             values.append(expected_retained)
-            link_colors.append("#4ADE8055")
+            link_colors.append(_hex_to_rgba("#4ADE80"))
         if expected_lost > 0:
             sources.append(node_idx["🔴 Yüksek Risk"])
             targets.append(node_idx["⚠️ Beklenen Kayıp"])
             values.append(expected_lost)
-            link_colors.append("#FF5D8F55")
+            link_colors.append(_hex_to_rgba("#FF5D8F"))
 
         node_colors = (
             [seg_color_map[s] for s in segments]
